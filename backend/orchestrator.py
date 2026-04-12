@@ -4,49 +4,60 @@ from agent.objections import predict_objections
 from agent.strategy import build_closing_strategy
 from agent.scripts import generate_scripts
 from agent.report import compile_report
+import json
 
 class ClosureAgentOrchestrator:
     def __init__(self):
         self.current_step = 0
         self.total_steps  = 6
 
-    def run(self, data):
+    def stream(self, data):
+        """Generator — yields progress events then final report as NDJSON lines"""
+        def emit(event: str, message: str, payload: dict = None):
+            line = {"event": event, "step": self.current_step, "total": self.total_steps, "message": message}
+            if payload:
+                line["data"] = payload
+            return json.dumps(line) + "\n"
+        
         try:
-            # Step 1: Lead Intelligence (6 layers + synthesis)
+            # Step 1: Lead Intelligence
             self.current_step = 1
+            yield emit("progress", "🔍 Scraping website, news, YouTube & Trustpilot...")
             lead_info = collect_lead_intelligence(data)
+            data._intelligence = lead_info   # Attach for agent access
+            yield emit("progress", f"✅ Intelligence gathered — score: {lead_info.get('intelligence_score', 0)}/100")
 
-            # Attach intelligence to data so agents can access synthesis + past_memory
-            data._intelligence = lead_info
-
-            # Step 2: Psychology Analysis
+            #Step2 Psychology Analysis
             self.current_step = 2
+            yield emit("progress", "🧠 Analysing client psychology...")
             psychology = analyze_psychology(lead_info, data)
+            yield emit("progress", "✅ Psychology profile ready")
 
             # Step 3: Objection Prediction
             self.current_step = 3
+            yield emit("progress", "⚠️ Predicting objections & rebuttals...")
             objections = predict_objections(psychology, data)
+            yield emit("progress", "✅ Objections mapped")
 
             # Step 4: Closing Strategy
             self.current_step = 4
+            yield emit("progress", "🎯 Building closing strategy...")
             strategy = build_closing_strategy(psychology, objections, data)
+            yield emit("progress", "✅ Closing strategy ready")
 
-            # Step 5: Script Generation
+            # Step 5 — Scripts
             self.current_step = 5
+            yield emit("progress", "🗣 Writing personalised call scripts...")
             scripts = generate_scripts(psychology, objections, strategy, data)
+            yield emit("progress", "✅ Scripts generated")
 
-            # Step 6: Report Compilation
+            # Step 6 — Report
             self.current_step = 6
+            yield emit("progress", "📋 Compiling final report...")
             report = compile_report(lead_info, psychology, objections, strategy, scripts)
-
-            return report
+            yield emit("done", "🎉 Report ready!", {"closure_report": report})
 
         except Exception as e:
-            raise Exception(f"Workflow failed at step {self.current_step}: {str(e)}")
+            yield emit("error", f"Workflow failed at step {self.current_step}: {str(e)}")
 
-    def get_progress(self):
-        return {
-            "current_step":        self.current_step,
-            "total_steps":         self.total_steps,
-            "progress_percentage": (self.current_step / self.total_steps) * 100
-        }
+

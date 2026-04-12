@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import os
+import json
 import logging
 from dotenv import load_dotenv
 from orchestrator import ClosureAgentOrchestrator
@@ -10,6 +12,8 @@ logging.basicConfig(
     level=logging.ERROR,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s"
 )
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -42,19 +46,36 @@ class ClosureRequest(BaseModel):
     linkedin_summary: str | None = ""
 
 
-# ---------- Main Endpoint ----------
+def error_stream(message: str):
+    """Helper — yields a single error event as a stream"""
+    yield json.dumps({"event": "error", "message": message}) + "\n"
+
+
+# ---------- Streaming Endpoint ----------
 @app.post("/analyze-closure")
 def analyze_closure(data: ClosureRequest):
+    if not GROQ_API_KEY:
+        return StreamingResponse(
+            error_stream("GROQ_API_KEY not configured"),
+            media_type="application/x-ndjson"
+        )
+
+    if not data.client_name or not data.client_name.strip():
+        return StreamingResponse(
+            error_stream("client_name is required"),
+            media_type="application/x-ndjson"
+        )
+
     try:
-        if not GROQ_API_KEY:
-            return {"status": "error", "message": "GROQ_API_KEY not configured"}
-
         orchestrator = ClosureAgentOrchestrator()
-        closure_report = orchestrator.run(data)
-
-        return {
-            "status": "success",
-            "closure_report": closure_report
-        }
+        return StreamingResponse(
+            orchestrator.stream(data),
+            media_type="application/x-ndjson",
+            headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
+        )
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error(f"Failed to start orchestrator: {e}")
+        return StreamingResponse(
+            error_stream(f"Failed to start analysis: {str(e)}"),
+            media_type="application/x-ndjson"
+        )

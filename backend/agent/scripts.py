@@ -20,8 +20,14 @@ CLIENT INTEL:
 - Lead Temperature: {data.lead_temperature}
 - Offer: {data.offer_type} at {data.coach_offer_price_range}
 - Call Goal: {data.call_goal}
-- Psychology Profile: {psychology}
-- Closing Strategy: {strategy}
+- Pain Points: {psychology.get("pain_points", [])}
+- Fears: {psychology.get("fears", [])}
+- Personality Type: {psychology.get("personality_type", "")}
+- Close Type: {strategy.get("recommended_close_type", "")}
+- Positioning: {strategy.get("positioning", "")}
+- Urgency Angle: {strategy.get("urgency_angle", "")}
+- Top Objections: {[o.get("objection") for o in objections.get("likely_objections", [])[:3]]}
+
 
 REAL INTELLIGENCE:
 - Personalization Hooks: {personalization_hooks}

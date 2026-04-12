@@ -13,7 +13,12 @@ def predict_objections(psychology, data):
 You are an expert sales coach. Predict the EXACT objections this client will raise and give sharp word-for-word responses.
 
 CLIENT PROFILE:
-- Psychology: {psychology}
+- Pain Points: {psychology.get("pain_points", [])}
+- Fears: {psychology.get("fears", [])}
+- Decision Style: {psychology.get("decision_making_style", "")}
+- Trust Level: {psychology.get("trust_level", "")}
+- Urgency: {psychology.get("urgency_level", "")}
+
 - Offer: {data.offer_type} at {data.coach_offer_price_range}
 - Revenue Stage: {data.revenue_stage}
 - Lead Temperature: {data.lead_temperature}

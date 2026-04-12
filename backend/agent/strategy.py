@@ -14,8 +14,11 @@ def build_closing_strategy(psychology, objections, data):
 You are a master sales strategist for high-ticket business coaches. Build a precise closing strategy.
 
 CLIENT PROFILE:
-- Psychology: {psychology}
-- Objections to expect: {objections}
+- Pain Points: {psychology.get("pain_points", [])}
+- Motivations: {psychology.get("motivations", [])}
+- Decision Style: {psychology.get("decision_making_style", "")}
+- Urgency: {psychology.get("urgency_level", "")}
+- Top Objections: {[o.get("objection") for o in objections.get("likely_objections", [])]}
 - Offer: {data.offer_type} at {data.coach_offer_price_range}
 - Call Goal: {data.call_goal}
 - Lead Temperature: {data.lead_temperature}

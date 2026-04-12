@@ -134,27 +134,60 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState([]);
+
 
   const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleSubmit = async () => {
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setProgress([]);
     try {
       const res = await fetch("http://localhost:8000/analyze-closure", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await res.json();
-      if (data.status === "error") throw new Error(data.message);
-      setResult(data.closure_report);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text}`);
+      }
+  
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+  
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+  
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete last line in buffer
+  
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const event = JSON.parse(trimmed);
+            if (event.event === "progress") {
+              setProgress(p => [...p, { message: event.message, step: event.step, total: event.total }]);
+            } else if (event.event === "done") {
+              setResult(event.data.closure_report);
+            } else if (event.event === "error") {
+              throw new Error(event.message);
+            }
+          } catch (parseErr) {
+            console.warn("Failed to parse line:", trimmed);
+          }
+        }
+      }
     } catch (e) {
-      setError(e.message);
+      setError(e.message || "Stream disconnected unexpectedly");
     } finally {
       setLoading(false);
     }
   };
-
+  
   const s = result?.synthesis || {};
   const score = result?.intelligence_score ?? 0;
 
@@ -292,8 +325,25 @@ export default function App() {
               fontSize: 16, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer",
             }}
           >
-            {loading ? "🔍 Gathering intelligence across 6 layers…" : "⚡ Prepare My Call"}
+            {loading ? "⚡ Running..." : "⚡ Prepare My Call"}
           </button>
+
+          {progress.length > 0 && (
+            <div style={{ marginTop: 16, background: "#0f172a", borderRadius: 8, padding: 16 }}>
+              {progress.map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <div style={{ width: 120, height: 4, background: "#1e293b", borderRadius: 4, flexShrink: 0 }}>
+                    <div style={{
+                      width: `${(p.step / p.total) * 100}%`,
+                      height: "100%", background: "#6366f1", borderRadius: 4,
+                      transition: "width 0.3s ease"
+                    }} />
+                  </div>
+                  <span style={{ color: "#94a3b8", fontSize: 13 }}>{p.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {error && (
             <div style={{ marginTop: 16, background: "#7f1d1d", color: "#fca5a5", borderRadius: 8, padding: 12, fontSize: 13 }}>
