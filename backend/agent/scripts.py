@@ -1,18 +1,28 @@
 import logging
 from utils.llm import call_groq
 from utils.jsonparser import parse_llm_response
-
+ 
 logger = logging.getLogger(__name__)
-
-def generate_scripts(psychology, objections, strategy, data):
+ 
+def generate_scripts(psychology, objections, strategy, data,
+                     retry_note: str = "", rewrite_fields: list = None):
     intelligence          = getattr(data, "_intelligence", {})
     synthesis             = intelligence.get("synthesis", {})
     personalization_hooks = synthesis.get("personalization_hooks", [])
     pain_signals          = synthesis.get("pain_signals", [])
-
+ 
+    retry_section = ""
+    if retry_note and rewrite_fields:
+        retry_section = f"""
+REWRITE INSTRUCTION — only fix these fields: {rewrite_fields}
+SPECIFIC FIXES REQUIRED: {retry_note}
+All other fields can stay the same — focus your effort on the weak fields only.
+"""
+ 
     prompt = f"""
-You are a world-class sales script writer for business coaches. Write a complete, word-for-word call script that feels natural and human — not robotic or salesy.
-
+You are a world-class sales script writer for business coaches. Write a complete,
+word-for-word call script that feels natural and human — not robotic or salesy.
+ 
 CLIENT INTEL:
 - Client Name: {data.client_name}
 - Problem They Mentioned: {data.problem_mentioned}
@@ -27,12 +37,11 @@ CLIENT INTEL:
 - Positioning: {strategy.get("positioning", "")}
 - Urgency Angle: {strategy.get("urgency_angle", "")}
 - Top Objections: {[o.get("objection") for o in objections.get("likely_objections", [])[:3]]}
-
-
+ 
 REAL INTELLIGENCE:
 - Personalization Hooks: {personalization_hooks}
 - Pain Signals: {pain_signals}
-
+{retry_section}
 INSTRUCTIONS:
 - Opening MUST use at least one personalization hook — not generic.
 - Discovery questions must dig into pain, cost of inaction, and desired outcome.
@@ -40,7 +49,7 @@ INSTRUCTIONS:
 - Closing lines must feel natural, not pushy.
 - Follow-up messages must be short, human, and non-desperate.
 - Return ONLY valid JSON, no extra text.
-
+ 
 {{
   "opening": "exact word-for-word opening line using a personalization hook",
   "discovery_questions": [

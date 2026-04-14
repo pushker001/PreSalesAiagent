@@ -1,17 +1,28 @@
 import logging
 from utils.llm import call_groq
 from utils.jsonparser import parse_llm_response
-
+ 
 logger = logging.getLogger(__name__)
-
-def analyze_psychology(intelligence, data):
+ 
+def analyze_psychology(intelligence, data, retry_note: str = ""):
     synthesis      = intelligence.get("synthesis", {})
     pain_signals   = synthesis.get("pain_signals", [])
     buying_signals = synthesis.get("buying_signals", [])
-
+ 
+    retry_section = ""
+    if retry_note:
+        retry_section = f"""
+PREVIOUS ATTEMPT WAS TOO GENERIC. YOU MUST FIX THIS:
+{retry_note}
+ 
+REQUIREMENT: Every single pain point, motivation, and fear below MUST
+directly reference something from the web intelligence data above.
+Generic phrases like "scaling challenges" or "revenue growth" are NOT acceptable.
+"""
+ 
     prompt = f"""
 You are an expert business coach and sales psychologist. Deeply analyze this potential client.
-
+ 
 CLIENT INTEL:
 - Name: {data.client_name}
 - Type: {data.client_type}
@@ -21,19 +32,19 @@ CLIENT INTEL:
 - Problem Mentioned: {data.problem_mentioned}
 - Offer: {data.offer_type} at {data.coach_offer_price_range}
 - Call Goal: {data.call_goal}
-
+ 
 REAL INTELLIGENCE FROM WEB DATA:
 - Pain Signals: {pain_signals}
 - Buying Signals: {buying_signals}
 - Business Stage: {synthesis.get("growth_stage", "unknown")}
 - Urgency Level: {synthesis.get("urgency_level", "medium")}
 - Company Summary: {synthesis.get("company_summary", "N/A")}
-
+{retry_section}
 INSTRUCTIONS:
 - Ground your analysis in the real pain and buying signals above.
 - Be specific, not generic.
 - Return ONLY valid JSON, no extra text.
-
+ 
 {{
   "pain_points": ["3-5 specific pain points grounded in real signals"],
   "motivations": ["3-5 specific motivations driving them to seek help now"],
