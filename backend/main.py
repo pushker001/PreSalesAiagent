@@ -19,6 +19,17 @@ load_dotenv()
 
 app = FastAPI()
 
+DATABASE_LAYER_READY = False
+database_import_error = None
+
+try:
+    from db.session import check_database_connection
+
+    DATABASE_LAYER_READY = True
+except Exception as exc:  # noqa: BLE001
+    database_import_error = str(exc)
+    logger.warning("Database layer not ready: %s", exc)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -49,6 +60,23 @@ class ClosureRequest(BaseModel):
 def error_stream(message: str):
     """Helper — yields a single error event as a stream"""
     yield json.dumps({"event": "error", "message": message}) + "\n"
+
+
+@app.get("/health/database")
+def database_health():
+    if not DATABASE_LAYER_READY:
+        return {
+            "ready": False,
+            "connected": False,
+            "message": "Database layer unavailable until SQLAlchemy dependencies and DATABASE_URL are configured.",
+            "details": database_import_error,
+        }
+
+    status = check_database_connection()
+    return {
+        "ready": True,
+        **status,
+    }
 
 
 # ---------- Streaming Endpoint ----------
