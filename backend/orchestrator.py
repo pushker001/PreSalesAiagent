@@ -6,6 +6,14 @@ from agent.scripts import generate_scripts
 from agent.report import compile_report
 from agent.reflection import critique_psychology, critique_scripts, critique_report
 import json
+
+from db.session import SessionLocal
+from services.lead_service import get_or_create_lead
+from services.reports_service import create_report
+
+
+
+
  
 class ClosureAgentOrchestrator:
     def __init__(self):
@@ -73,15 +81,54 @@ class ClosureAgentOrchestrator:
  
             consistency = critique_report(report)
             report["consistency_check"] = consistency
- 
+
             flags = consistency.get("flags", [])
             if flags:
                 flag_summary = f"{len(flags)} issue(s) flagged"
                 yield emit("progress", f"⚠️ Consistency check: {flag_summary} — {consistency.get('summary', '')}")
             else:
                 yield emit("progress", f"✅ Consistency check passed — {consistency.get('summary', '')}")
+
+            db = SessionLocal()
+            try:
+                lead_data = {
+                    "client_name": data.client_name,
+                    "website_url": data.website_url,
+                    "linkedin_url": data.linkedin_url,
+                    "linkedin_summary": data.linkedin_summary,
+                    "client_type": data.client_type,
+                    "revenue_stage": data.revenue_stage,
+                    "lead_source": data.lead_source,
+                    "lead_temperature": data.lead_temperature,
+                    "problem_mentioned": data.problem_mentioned,
+                    "coach_offer_price_range": data.coach_offer_price_range,
+                    "offer_type": data.offer_type,
+                    "call_goal": data.call_goal,
+                }
+
+                lead = get_or_create_lead(db, lead_data)
+                report_data = {
+                    "lead_id": lead.id,
+                    "intelligence_score": report.get("intelligence_score", 0),
+                    "full_report_json": report,
+                }
+                saved_report = create_report(db, report_data)
+                lead_id = lead.id
+                report_id = saved_report.id
+            finally:
+                db.close()
  
-            yield emit("done", "🎉 Report ready!", {"closure_report": report})
+            yield emit(
+                "done",
+                "🎉 Report ready!",
+                {
+                    "closure_report": report,
+                    "lead_id": lead_id,
+                    "report_id": report_id,
+                },
+            )
+            
+            
  
         except Exception as e:
             yield emit("error", f"Workflow failed at step {self.current_step}: {str(e)}")
