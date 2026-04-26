@@ -23,11 +23,14 @@ class Lead(Base):
     coach_offer_price_range: Mapped[str] = mapped_column(String(120))
     offer_type: Mapped[str] = mapped_column(String(120))
     call_goal: Mapped[str] = mapped_column(String(120))
+    coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    booking_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[LeadStatus] = mapped_column(
         Enum(LeadStatus, name="lead_status"),
         default=LeadStatus.NEW,
         nullable=False,
     )
+    last_activity_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

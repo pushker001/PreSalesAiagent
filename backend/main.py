@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,6 +7,7 @@ import json
 import logging
 from dotenv import load_dotenv
 from orchestrator import ClosureAgentOrchestrator
+from sqlalchemy.orm import Session
 
 logging.basicConfig(
     level=logging.ERROR,
@@ -23,7 +24,13 @@ DATABASE_LAYER_READY = False
 database_import_error = None
 
 try:
-    from db.session import check_database_connection
+    from db.session import check_database_connection, get_db
+    from schemas.lead import LeadResponse, LeadUpdate
+    from schemas.report import ReportResponse
+    from schemas.qualification import QualificationResponse
+    from services.lead_service import get_all_leads, get_lead_by_id, update_lead
+    from services.reports_service import get_reports_by_lead_id
+    from services.qualification_service import get_latest_qualification_by_lead_id
 
     DATABASE_LAYER_READY = True
 except Exception as exc:  # noqa: BLE001
@@ -77,6 +84,56 @@ def database_health():
         "ready": True,
         **status,
     }
+# get all leads
+
+@app.get("/leads", response_model=list[LeadResponse])
+def list_leads(db: Session = Depends(get_db)):
+    return get_all_leads(db)
+
+# get lead by id
+
+@app.get("/leads/{lead_id}", response_model=LeadResponse)
+def get_lead(lead_id: str, db: Session = Depends(get_db)):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return lead
+
+
+@app.get("/leads/{lead_id}/reports", response_model=list[ReportResponse])
+def get_lead_reports(lead_id: str, db: Session = Depends(get_db)):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return get_reports_by_lead_id(db, lead_id)
+
+
+@app.get("/leads/{lead_id}/qualification", response_model=QualificationResponse)
+def get_lead_qualification(lead_id: str, db: Session = Depends(get_db)):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    qualification = get_latest_qualification_by_lead_id(db, lead_id)
+    if not qualification:
+        raise HTTPException(status_code=404, detail="Qualification not found")
+
+    return qualification
+
+
+@app.patch("/leads/{lead_id}", response_model=LeadResponse)
+def patch_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_db)):
+    update_data = lead_update.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No lead fields provided for update")
+
+    lead = update_lead(db, lead_id, update_data)
+
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    return lead
+
 
 
 # ---------- Streaming Endpoint ----------

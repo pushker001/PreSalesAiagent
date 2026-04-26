@@ -18,6 +18,8 @@ class LeadBase(BaseModel):
     coach_offer_price_range: str
     offer_type: str
     call_goal: str
+    coach_notes: str | None = None
+    booking_status: str | None = None
 
 
 class LeadCreate(LeadBase):
@@ -27,10 +29,18 @@ class LeadCreate(LeadBase):
 class LeadResponse(LeadBase):
     id: str
     status: LeadStatus
+    last_activity_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LeadUpdate(BaseModel):
+    status: LeadStatus | None = None
+    coach_notes: str | None = None
+    booking_status: str | None = None
+    last_activity_at: datetime | None = None
 
 
 class LeadStatusUpdate(BaseModel):

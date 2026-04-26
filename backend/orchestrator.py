@@ -10,6 +10,7 @@ import json
 from db.session import SessionLocal
 from services.lead_service import get_or_create_lead
 from services.reports_service import create_report
+from services.qualification_service import build_qualification_data, create_qualification
 
 
 
@@ -113,6 +114,15 @@ class ClosureAgentOrchestrator:
                     "full_report_json": report,
                 }
                 saved_report = create_report(db, report_data)
+                qualification_data = build_qualification_data(report, lead, saved_report)
+                saved_qualification = create_qualification(db, qualification_data)
+                qualification_id = saved_qualification.id
+                qualification_score = saved_qualification.overall_score
+                qualification_action = saved_qualification.recommended_action
+                qualification_reasoning = saved_qualification.reasoning
+
+
+
                 lead_id = lead.id
                 report_id = saved_report.id
             finally:
@@ -125,6 +135,12 @@ class ClosureAgentOrchestrator:
                     "closure_report": report,
                     "lead_id": lead_id,
                     "report_id": report_id,
+                    "qualification": {
+                        "id": qualification_id,
+                        "overall_score": qualification_score,
+                        "recommended_action": qualification_action,
+                        "reasoning": qualification_reasoning,
+                    }
                 },
             )
             
