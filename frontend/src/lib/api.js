@@ -37,6 +37,16 @@ export async function updateLead(leadId, payload) {
   });
   return parseJson(response);
 }
+ 
+export const getleadActivities = async (leadId) => {
+  const res = await fetch(`${API_BASE_URL}/leads/${leadId}/activities`)
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch lead activities');
+  }
+  return res.json();
+
+}
 
 export async function analyzeLead(formData, handlers = {}) {
   const { onProgress, onDone } = handlers;

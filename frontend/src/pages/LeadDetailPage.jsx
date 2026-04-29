@@ -17,6 +17,8 @@ import {
   Surface,
 } from "../components/ui";
 
+import { getleadActivities } from "../lib/api";
+
 function TabButton({ active, children, onClick }) {
   return (
     <button className={`tab-button${active ? " is-active" : ""}`} onClick={onClick} type="button">
@@ -40,6 +42,7 @@ export default function LeadDetailPage() {
     coach_notes: "",
   });
   const [saveState, setSaveState] = useState({ saving: false, error: "", success: "" });
+  const [activities, setActivities] = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -48,10 +51,11 @@ export default function LeadDetailPage() {
       setLoading(true);
       setError("");
       try {
-        const [leadData, reportData, qualificationData] = await Promise.all([
+        const [leadData, reportData, qualificationData, activitiesData] = await Promise.all([
           fetchLead(leadId),
           fetchLeadReports(leadId),
           fetchLeadQualification(leadId),
+          getleadActivities(leadId).catch(() => []),
         ]);
 
         if (!active) return;
@@ -60,6 +64,7 @@ export default function LeadDetailPage() {
         setReports(reportData);
         setQualification(qualificationData);
         setSelectedReportId(reportData[0]?.id || null);
+        setActivities(activitiesData || []);
         setLeadStateForm({
           status: leadData.status || "",
           booking_status: leadData.booking_status || "",
@@ -332,21 +337,21 @@ export default function LeadDetailPage() {
 
         {tab === "timeline" ? (
           <div className="timeline-list">
-            <div className="timeline-card">
-              <span className="eyebrow">Analyzed</span>
-              <strong>{selectedReport ? formatDate(selectedReport.generated_at) : "Unknown"}</strong>
-              <p>Latest AI report saved and attached to this lead.</p>
-            </div>
-            <div className="timeline-card">
-              <span className="eyebrow">Qualified</span>
-              <strong>{qualification ? titleFromAction(qualification.recommended_action) : "Pending"}</strong>
-              <p>{qualification?.reasoning || "Qualification history will expand here as memory features are added."}</p>
-            </div>
-            <div className="timeline-card">
-              <span className="eyebrow">Future memory</span>
-              <strong>Notes, calls, follow-up, booking</strong>
-              <p>This section is intentionally prepared for the next modules.</p>
-            </div>
+            {activities.length ? (
+              activities.map((activity, i) => (
+                <div className="timeline-card" key={i}>
+                  <span className="eyebrow">{activity.event_type}</span>
+                  <strong>{activity.title}</strong>
+                  <p>{activity.details || "—"}</p>
+                </div>
+              ))
+            ) : (
+              <div className="timeline-card">
+                <span className="eyebrow">No activity yet</span>
+                <strong>Timeline is empty</strong>
+                <p>Activities will appear here as the lead progresses.</p>
+              </div>
+            )}
           </div>
         ) : null}
       </Surface>
