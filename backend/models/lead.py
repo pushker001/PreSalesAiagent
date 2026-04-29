@@ -49,3 +49,8 @@ class Lead(Base):
         back_populates="lead",
         cascade="all, delete-orphan",
     )
+    activities = relationship(
+        "LeadActivity",
+        back_populates="lead",
+        cascade="all, delete-orphan",
+    )

@@ -11,7 +11,7 @@ from db.session import SessionLocal
 from services.lead_service import get_or_create_lead
 from services.reports_service import create_report
 from services.qualification_service import build_qualification_data, create_qualification
-
+from services.lead_activity_service import create_lead_activity
 
 
 
@@ -114,8 +114,37 @@ class ClosureAgentOrchestrator:
                     "full_report_json": report,
                 }
                 saved_report = create_report(db, report_data)
+                # lead activity 
+                create_lead_activity(
+                    db,
+                    {
+                        "lead_id": lead.id,
+                        "event_type": "analysis_created",
+                        "title": "Analysis completed",
+                        "details": "A new AI lead analysis report was generated and saved.",
+                        "metadata_json": {
+                            "report_id": saved_report.id,
+                            "intelligence_score": saved_report.intelligence_score,
+                        },
+                    },
+                )
+
                 qualification_data = build_qualification_data(report, lead, saved_report)
                 saved_qualification = create_qualification(db, qualification_data)
+                create_lead_activity(
+                    db,
+                    {
+                        "lead_id": lead.id,
+                        "event_type": "qualification_created",
+                        "title": "Qualification created",
+                        "details": f"Lead qualified with score {saved_qualification.overall_score}.",
+                        "metadata_json": {
+                            "qualification_id": saved_qualification.id,
+                            "overall_score": saved_qualification.overall_score,
+                            "recommended_action": str(saved_qualification.recommended_action),
+                        },
+                    },
+                )
                 qualification_id = saved_qualification.id
                 qualification_score = saved_qualification.overall_score
                 qualification_action = saved_qualification.recommended_action

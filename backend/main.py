@@ -8,6 +8,10 @@ import logging
 from dotenv import load_dotenv
 from orchestrator import ClosureAgentOrchestrator
 from sqlalchemy.orm import Session
+from services.lead_activity_service import create_lead_activity
+from services.lead_activity_service import get_lead_activities 
+from schemas.lead_activity import LeadActivityResponse
+
 
 logging.basicConfig(
     level=logging.ERROR,
@@ -132,7 +136,55 @@ def patch_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
+    if "status" in update_data:
+        create_lead_activity(
+            db,
+            {
+                "lead_id": lead.id,
+                "event_type": "lead_status_updated",
+                "title": "Lead status updated",
+                "details": f"Lead status changed to {lead.status}.",
+                "metadata_json": {"status": str(lead.status)},
+            },
+        )
+
+    if "booking_status" in update_data:
+        create_lead_activity(
+            db,
+            {
+                "lead_id": lead.id,
+                "event_type": "booking_status_updated",
+                "title": "Booking status updated",
+                "details": f"Booking status changed to {lead.booking_status}.",
+                "metadata_json": {"booking_status": lead.booking_status},
+            },
+        )
+
+    if "coach_notes" in update_data:
+        create_lead_activity(
+            db,
+            {
+                "lead_id": lead.id,
+                "event_type": "coach_note_added",
+                "title": "Coach notes updated",
+                "details": "Coach notes were added or updated for this lead.",
+                "metadata_json": {"has_notes": bool(lead.coach_notes)},
+            },
+        )
+
     return lead
+
+@app.get("/leads/{lead_id}/activities", response_model=list[LeadActivityResponse])
+def list_lead_activities(lead_id: str, db: Session = Depends(get_db)):
+    # Step 1 check if leads exist
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Fetch activities
+    activities = get_lead_activities(db, lead_id)
+
+    return activities
 
 
 
