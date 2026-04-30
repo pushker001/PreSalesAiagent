@@ -894,6 +894,24 @@ a {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.timeline-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.timeline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.timeline-date {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .timeline-card strong {
   display: block;
   margin: 8px 0;

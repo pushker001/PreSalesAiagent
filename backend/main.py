@@ -8,9 +8,8 @@ import logging
 from dotenv import load_dotenv
 from orchestrator import ClosureAgentOrchestrator
 from sqlalchemy.orm import Session
-from services.lead_activity_service import create_lead_activity
-from services.lead_activity_service import get_lead_activities 
-from schemas.lead_activity import LeadActivityResponse
+from services.lead_activity_service import create_lead_activity, get_lead_activities
+from schemas.lead_activity import LeadActivityInput, LeadActivityResponse
 
 
 logging.basicConfig(
@@ -131,10 +130,14 @@ def patch_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_
     if not update_data:
         raise HTTPException(status_code=400, detail="No lead fields provided for update")
 
-    lead = update_lead(db, lead_id, update_data)
-
-    if not lead:
+    existing_lead = get_lead_by_id(db, lead_id)
+    if not existing_lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+
+    previous_status = str(existing_lead.status)
+    previous_booking_status = existing_lead.booking_status
+
+    lead = update_lead(db, lead_id, update_data)
 
     if "status" in update_data:
         create_lead_activity(
@@ -143,8 +146,11 @@ def patch_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_
                 "lead_id": lead.id,
                 "event_type": "lead_status_updated",
                 "title": "Lead status updated",
-                "details": f"Lead status changed to {lead.status}.",
-                "metadata_json": {"status": str(lead.status)},
+                "details": f"Lead status changed from {previous_status} to {lead.status}.",
+                "metadata_json": {
+                    "from_status": previous_status,
+                    "to_status": str(lead.status),
+                },
             },
         )
 
@@ -155,8 +161,14 @@ def patch_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_
                 "lead_id": lead.id,
                 "event_type": "booking_status_updated",
                 "title": "Booking status updated",
-                "details": f"Booking status changed to {lead.booking_status}.",
-                "metadata_json": {"booking_status": lead.booking_status},
+                "details": (
+                    f"Booking status changed from {previous_booking_status or 'not_set'} "
+                    f"to {lead.booking_status or 'not_set'}."
+                ),
+                "metadata_json": {
+                    "from_booking_status": previous_booking_status,
+                    "to_booking_status": lead.booking_status,
+                },
             },
         )
 
@@ -174,17 +186,35 @@ def patch_lead(lead_id: str, lead_update: LeadUpdate, db: Session = Depends(get_
 
     return lead
 
+
 @app.get("/leads/{lead_id}/activities", response_model=list[LeadActivityResponse])
 def list_lead_activities(lead_id: str, db: Session = Depends(get_db)):
-    # Step 1 check if leads exist
     lead = get_lead_by_id(db, lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    
-    # Fetch activities
-    activities = get_lead_activities(db, lead_id)
+    return get_lead_activities(db, lead_id)
 
-    return activities
+
+@app.post("/leads/{lead_id}/activities", response_model=LeadActivityResponse)
+def create_manual_lead_activity(
+    lead_id: str,
+    activity_input: LeadActivityInput,
+    db: Session = Depends(get_db),
+):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    return create_lead_activity(
+        db,
+        {
+            "lead_id": lead_id,
+            "event_type": activity_input.event_type,
+            "title": activity_input.title,
+            "details": activity_input.details,
+            "metadata_json": activity_input.metadata_json,
+        },
+    )
 
 
 

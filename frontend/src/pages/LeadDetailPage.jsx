@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  createLeadActivity,
   fetchLead,
+  fetchLeadActivities,
   fetchLeadQualification,
   fetchLeadReports,
   updateLead,
@@ -17,7 +19,44 @@ import {
   Surface,
 } from "../components/ui";
 
-import { getleadActivities } from "../lib/api";
+const ACTIVITY_TYPE_OPTIONS = [
+  {
+    value: "call_logged",
+    label: "Call logged",
+    title: "Call logged",
+    placeholder: "Summarize what happened on the call, key objections, and the agreed next step.",
+  },
+  {
+    value: "follow_up_sent",
+    label: "Follow-up sent",
+    title: "Follow-up sent",
+    placeholder: "Capture what follow-up you sent and the angle you used.",
+  },
+  {
+    value: "follow_up_replied",
+    label: "Follow-up replied",
+    title: "Lead replied to follow-up",
+    placeholder: "Summarize what the lead said and what it means for the next move.",
+  },
+  {
+    value: "proposal_sent",
+    label: "Proposal sent",
+    title: "Proposal sent",
+    placeholder: "Note what offer or proposal was sent and any timing attached to it.",
+  },
+  {
+    value: "booking_reminder_sent",
+    label: "Booking reminder",
+    title: "Booking reminder sent",
+    placeholder: "Describe the reminder that was sent and what action you're waiting on.",
+  },
+  {
+    value: "general_note",
+    label: "General note",
+    title: "General timeline note",
+    placeholder: "Add any other important memory you want this lead timeline to retain.",
+  },
+];
 
 function TabButton({ active, children, onClick }) {
   return (
@@ -43,6 +82,12 @@ export default function LeadDetailPage() {
   });
   const [saveState, setSaveState] = useState({ saving: false, error: "", success: "" });
   const [activities, setActivities] = useState([]);
+  const [activityForm, setActivityForm] = useState({
+    event_type: ACTIVITY_TYPE_OPTIONS[0].value,
+    title: ACTIVITY_TYPE_OPTIONS[0].title,
+    details: "",
+  });
+  const [activitySave, setActivitySave] = useState({ saving: false, error: "", success: "" });
 
   useEffect(() => {
     let active = true;
@@ -55,7 +100,7 @@ export default function LeadDetailPage() {
           fetchLead(leadId),
           fetchLeadReports(leadId),
           fetchLeadQualification(leadId),
-          getleadActivities(leadId).catch(() => []),
+          fetchLeadActivities(leadId).catch(() => []),
         ]);
 
         if (!active) return;
@@ -90,6 +135,22 @@ export default function LeadDetailPage() {
     setSaveState((current) => ({ ...current, success: "", error: "" }));
   }
 
+  function handleActivityTypeChange(event) {
+    const nextType = ACTIVITY_TYPE_OPTIONS.find((item) => item.value === event.target.value);
+    setActivityForm((current) => ({
+      ...current,
+      event_type: event.target.value,
+      title: nextType?.title || current.title,
+    }));
+    setActivitySave((current) => ({ ...current, success: "", error: "" }));
+  }
+
+  function handleActivityFieldChange(event) {
+    const { name, value } = event.target;
+    setActivityForm((current) => ({ ...current, [name]: value }));
+    setActivitySave((current) => ({ ...current, success: "", error: "" }));
+  }
+
   async function handleLeadStateSave(event) {
     event.preventDefault();
     setSaveState({ saving: true, error: "", success: "" });
@@ -101,8 +162,10 @@ export default function LeadDetailPage() {
         coach_notes: leadStateForm.coach_notes.trim() || undefined,
         last_activity_at: new Date().toISOString(),
       });
+      const refreshedActivities = await fetchLeadActivities(leadId).catch(() => []);
 
       setLead(updatedLead);
+      setActivities(refreshedActivities);
       setLeadStateForm({
         status: updatedLead.status || "",
         booking_status: updatedLead.booking_status || "",
@@ -113,6 +176,38 @@ export default function LeadDetailPage() {
       setSaveState({
         saving: false,
         error: err.message || "Failed to update lead state.",
+        success: "",
+      });
+    }
+  }
+
+  async function handleActivitySave(event) {
+    event.preventDefault();
+    setActivitySave({ saving: true, error: "", success: "" });
+
+    try {
+      const createdActivity = await createLeadActivity(leadId, {
+        event_type: activityForm.event_type,
+        title: activityForm.title.trim(),
+        details: activityForm.details.trim() || null,
+        metadata_json: {
+          source: "coach",
+          category: activityForm.event_type,
+        },
+      });
+
+      setActivities((current) => [createdActivity, ...current]);
+      const selectedType = ACTIVITY_TYPE_OPTIONS.find((item) => item.value === activityForm.event_type);
+      setActivityForm({
+        event_type: activityForm.event_type,
+        title: selectedType?.title || "",
+        details: "",
+      });
+      setActivitySave({ saving: false, error: "", success: "Timeline event added." });
+    } catch (err) {
+      setActivitySave({
+        saving: false,
+        error: err.message || "Failed to save timeline event.",
         success: "",
       });
     }
@@ -140,6 +235,8 @@ export default function LeadDetailPage() {
   const reportPayload = selectedReport?.full_report_json || {};
   const scripts = reportPayload.scripts || {};
   const synthesis = reportPayload.synthesis || {};
+  const activeActivityOption =
+    ACTIVITY_TYPE_OPTIONS.find((item) => item.value === activityForm.event_type) || ACTIVITY_TYPE_OPTIONS[0];
 
   return (
     <div className="page-stack">
@@ -336,22 +433,79 @@ export default function LeadDetailPage() {
         ) : null}
 
         {tab === "timeline" ? (
-          <div className="timeline-list">
-            {activities.length ? (
-              activities.map((activity, i) => (
-                <div className="timeline-card" key={i}>
-                  <span className="eyebrow">{activity.event_type}</span>
-                  <strong>{activity.title}</strong>
-                  <p>{activity.details || "—"}</p>
+          <div className="timeline-stack">
+            <Surface className="inner-surface">
+              <SectionHeader
+                title="Log memory event"
+                subtitle="Capture calls, follow-ups, proposals, or any other sales context this lead should remember."
+              />
+
+              <form className="lead-state-form" onSubmit={handleActivitySave}>
+                <div className="field-grid">
+                  <label className="field">
+                    <span>Activity type</span>
+                    <select onChange={handleActivityTypeChange} value={activityForm.event_type}>
+                      {ACTIVITY_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="field">
+                    <span>Timeline title</span>
+                    <input
+                      name="title"
+                      onChange={handleActivityFieldChange}
+                      placeholder="What happened?"
+                      value={activityForm.title}
+                    />
+                  </label>
                 </div>
-              ))
-            ) : (
-              <div className="timeline-card">
-                <span className="eyebrow">No activity yet</span>
-                <strong>Timeline is empty</strong>
-                <p>Activities will appear here as the lead progresses.</p>
-              </div>
-            )}
+
+                <label className="field">
+                  <span>Details</span>
+                  <textarea
+                    name="details"
+                    onChange={handleActivityFieldChange}
+                    placeholder={activeActivityOption.placeholder}
+                    rows="4"
+                    value={activityForm.details}
+                  />
+                </label>
+
+                <div className="lead-state-actions">
+                  <button className="button button-primary" disabled={activitySave.saving} type="submit">
+                    {activitySave.saving ? "Saving…" : "Add memory event"}
+                  </button>
+                </div>
+
+                {activitySave.error ? <div className="inline-error">{activitySave.error}</div> : null}
+                {activitySave.success ? <div className="inline-success">{activitySave.success}</div> : null}
+              </form>
+            </Surface>
+
+            <div className="timeline-list">
+              {activities.length ? (
+                activities.map((activity) => (
+                  <div className="timeline-card" key={activity.id}>
+                    <div className="timeline-head">
+                      <span className="eyebrow">{activity.event_type}</span>
+                      <span className="timeline-date">{formatDate(activity.created_at)}</span>
+                    </div>
+                    <strong>{activity.title}</strong>
+                    <p>{activity.details || "—"}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="timeline-card">
+                  <span className="eyebrow">No activity yet</span>
+                  <strong>Timeline is empty</strong>
+                  <p>Activities will appear here as the lead progresses.</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
       </Surface>

@@ -54,3 +54,5 @@ class Lead(Base):
         back_populates="lead",
         cascade="all, delete-orphan",
     )
+    
+    memory = relationship("LeadMemory", back_populates="lead", uselist=False, cascade="all, delete-orphan")

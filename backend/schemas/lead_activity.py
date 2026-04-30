@@ -15,6 +15,13 @@ class LeadActivityCreate(LeadActivityBase):
     pass
 
 
+class LeadActivityInput(BaseModel):
+    event_type: str
+    title: str
+    details: str | None = None
+    metadata_json: dict | None = None
+
+
 class LeadActivityResponse(LeadActivityBase):
     id: str
     created_at: datetime
