@@ -899,6 +899,24 @@ a {
   gap: 18px;
 }
 
+.follow-up-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.follow-up-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.follow-up-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+}
+
 .timeline-head {
   display: flex;
   justify-content: space-between;
@@ -976,7 +994,8 @@ a {
   .metrics-grid,
   .split-layout,
   .report-grid,
-  .overview-grid {
+  .overview-grid,
+  .follow-up-grid {
     grid-template-columns: 1fr;
   }
 }

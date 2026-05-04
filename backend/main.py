@@ -10,6 +10,8 @@ from orchestrator import ClosureAgentOrchestrator
 from sqlalchemy.orm import Session
 from services.lead_activity_service import create_lead_activity, get_lead_activities
 from schemas.lead_activity import LeadActivityInput, LeadActivityResponse
+from schemas.follow_up import FollowUpSuggestionResponse
+from services.follow_up_service import build_follow_up_suggestion
 
 
 logging.basicConfig(
@@ -215,6 +217,34 @@ def create_manual_lead_activity(
             "metadata_json": activity_input.metadata_json,
         },
     )
+
+@app.post("/leads/{lead_id}/follow-up/generate", response_model=FollowUpSuggestionResponse)
+def generate_follow_up(lead_id:str, db: Session = Depends(get_db)):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    qualification = get_latest_qualification_by_lead_id(db, lead_id)
+    if not qualification:
+        raise HTTPException(status_code=404, detail="Qualification not found")
+    
+    reports = get_reports_by_lead_id(db, lead_id)
+    if not reports:
+        raise HTTPException(status_code=404, detail="Reports not found")
+    
+    latest_report = reports[0]
+    activities = get_lead_activities(db, lead_id)
+
+    suggestion = build_follow_up_suggestion(
+        lead,
+        qualification,
+        latest_report.full_report_json,
+        activities,
+    )
+
+    return suggestion
+
+
 
 
 

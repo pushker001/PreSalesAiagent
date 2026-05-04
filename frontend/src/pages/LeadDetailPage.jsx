@@ -6,6 +6,7 @@ import {
   fetchLeadActivities,
   fetchLeadQualification,
   fetchLeadReports,
+  generateFollowUp,
   updateLead,
 } from "../lib/api";
 import { formatDate, titleFromAction, toneFromAction } from "../lib/formatters";
@@ -88,6 +89,11 @@ export default function LeadDetailPage() {
     details: "",
   });
   const [activitySave, setActivitySave] = useState({ saving: false, error: "", success: "" });
+  const [followUpState, setFollowUpState] = useState({
+    loading: false,
+    error: "",
+    suggestion: null,
+  });
 
   useEffect(() => {
     let active = true;
@@ -209,6 +215,21 @@ export default function LeadDetailPage() {
         saving: false,
         error: err.message || "Failed to save timeline event.",
         success: "",
+      });
+    }
+  }
+
+  async function handleGenerateFollowUp() {
+    setFollowUpState({ loading: true, error: "", suggestion: null });
+
+    try {
+      const suggestion = await generateFollowUp(leadId);
+      setFollowUpState({ loading: false, error: "", suggestion });
+    } catch (err) {
+      setFollowUpState({
+        loading: false,
+        error: err.message || "Failed to generate follow-up suggestion.",
+        suggestion: null,
       });
     }
   }
@@ -382,6 +403,9 @@ export default function LeadDetailPage() {
           <TabButton active={tab === "scripts"} onClick={() => setTab("scripts")}>
             Scripts
           </TabButton>
+          <TabButton active={tab === "follow-up"} onClick={() => setTab("follow-up")}>
+            Follow-up
+          </TabButton>
           <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
             Timeline
           </TabButton>
@@ -429,6 +453,64 @@ export default function LeadDetailPage() {
             <CopyBlock label="Discovery questions" content={scripts.discovery_questions || []} />
             <CopyBlock label="Value proposition" content={scripts.value_proposition} />
             <CopyBlock label="Closing lines" content={scripts.closing_lines} />
+          </div>
+        ) : null}
+
+        {tab === "follow-up" ? (
+          <div className="follow-up-stack">
+            <Surface className="inner-surface">
+              <SectionHeader
+                title="Follow-up agent"
+                subtitle="Generate the next best follow-up based on qualification, memory, and current lead state."
+              />
+
+              <div className="follow-up-actions">
+                <button
+                  className="button button-primary"
+                  disabled={followUpState.loading}
+                  onClick={handleGenerateFollowUp}
+                  type="button"
+                >
+                  {followUpState.loading ? "Generating…" : "Generate follow-up"}
+                </button>
+
+                {qualification ? (
+                  <StatusPill tone={toneFromAction(qualification.recommended_action)}>
+                    {titleFromAction(qualification.recommended_action)}
+                  </StatusPill>
+                ) : null}
+              </div>
+
+              {followUpState.error ? <div className="inline-error">{followUpState.error}</div> : null}
+            </Surface>
+
+            {followUpState.suggestion ? (
+              <div className="follow-up-grid">
+                <Surface className="inner-surface">
+                  <SectionHeader title="Suggestion summary" subtitle="Why this follow-up was chosen right now." />
+                  <div className="detail-list">
+                    <div>
+                      <span>Follow-up type</span>
+                      <strong>{followUpState.suggestion.follow_up_type}</strong>
+                    </div>
+                    <div>
+                      <span>Recommended timing</span>
+                      <strong>{followUpState.suggestion.recommended_timing}</strong>
+                    </div>
+                  </div>
+                  <p className="hero-copy">{followUpState.suggestion.reasoning}</p>
+                </Surface>
+
+                <CopyBlock label={`Subject line: ${followUpState.suggestion.subject_line}`} content={followUpState.suggestion.message} />
+              </div>
+            ) : (
+              <Surface className="inner-surface">
+                <EmptyState
+                  title="No follow-up generated yet"
+                  body="Generate a suggestion to see the recommended follow-up type, timing, and ready-to-use message."
+                />
+              </Surface>
+            )}
           </div>
         ) : null}
 

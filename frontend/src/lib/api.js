@@ -52,6 +52,13 @@ export async function createLeadActivity(leadId, payload) {
   return parseJson(response);
 }
 
+export async function generateFollowUp(leadId) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/follow-up/generate`, {
+    method: "POST",
+  });
+  return parseJson(response);
+}
+
 
 export async function analyzeLead(formData, handlers = {}) {
   const { onProgress, onDone } = handlers;
