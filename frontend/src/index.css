@@ -917,6 +917,11 @@ a {
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
 }
 
+.conversation-textarea {
+  min-height: 170px;
+  resize: vertical;
+}
+
 .timeline-head {
   display: flex;
   justify-content: space-between;

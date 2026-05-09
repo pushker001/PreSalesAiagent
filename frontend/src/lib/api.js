@@ -59,6 +59,22 @@ export async function generateFollowUp(leadId) {
   return parseJson(response);
 }
 
+export async function generateBookingSuggestion(leadId) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/booking/generate`, {
+    method: "POST",
+  });
+  return parseJson(response);
+}
+
+export async function generateConversationSuggestion(leadId, currentMessage) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/conversation/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_message: currentMessage }),
+  });
+  return parseJson(response);
+}
+
 
 export async function analyzeLead(formData, handlers = {}) {
   const { onProgress, onDone } = handlers;

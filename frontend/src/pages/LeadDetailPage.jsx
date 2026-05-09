@@ -6,6 +6,8 @@ import {
   fetchLeadActivities,
   fetchLeadQualification,
   fetchLeadReports,
+  generateBookingSuggestion,
+  generateConversationSuggestion,
   generateFollowUp,
   updateLead,
 } from "../lib/api";
@@ -90,6 +92,17 @@ export default function LeadDetailPage() {
   });
   const [activitySave, setActivitySave] = useState({ saving: false, error: "", success: "" });
   const [followUpState, setFollowUpState] = useState({
+    loading: false,
+    error: "",
+    suggestion: null,
+  });
+  const [bookingState, setBookingState] = useState({
+    loading: false,
+    error: "",
+    suggestion: null,
+  });
+  const [conversationState, setConversationState] = useState({
+    currentMessage: "",
     loading: false,
     error: "",
     suggestion: null,
@@ -231,6 +244,66 @@ export default function LeadDetailPage() {
         error: err.message || "Failed to generate follow-up suggestion.",
         suggestion: null,
       });
+    }
+  }
+
+  async function handleGenerateBookingSuggestion() {
+    setBookingState({ loading: true, error: "", suggestion: null });
+
+    try {
+      const suggestion = await generateBookingSuggestion(leadId);
+      setBookingState({ loading: false, error: "", suggestion });
+    } catch (err) {
+      setBookingState({
+        loading: false,
+        error: err.message || "Failed to generate booking suggestion.",
+        suggestion: null,
+      });
+    }
+  }
+
+  function handleConversationMessageChange(event) {
+    const { value } = event.target;
+    setConversationState((current) => ({
+      ...current,
+      currentMessage: value,
+      error: "",
+    }));
+  }
+
+  async function handleGenerateConversationSuggestion() {
+    if (!conversationState.currentMessage.trim()) {
+      setConversationState((current) => ({
+        ...current,
+        error: "Add the lead's latest message before generating a reply.",
+      }));
+      return;
+    }
+
+    setConversationState((current) => ({
+      ...current,
+      loading: true,
+      error: "",
+      suggestion: null,
+    }));
+
+    try {
+      const suggestion = await generateConversationSuggestion(leadId, conversationState.currentMessage.trim());
+      const refreshedActivities = await fetchLeadActivities(leadId).catch(() => activities);
+      setActivities(refreshedActivities);
+      setConversationState((current) => ({
+        ...current,
+        loading: false,
+        error: "",
+        suggestion,
+      }));
+    } catch (err) {
+      setConversationState((current) => ({
+        ...current,
+        loading: false,
+        error: err.message || "Failed to generate conversation suggestion.",
+        suggestion: null,
+      }));
     }
   }
 
@@ -406,6 +479,12 @@ export default function LeadDetailPage() {
           <TabButton active={tab === "follow-up"} onClick={() => setTab("follow-up")}>
             Follow-up
           </TabButton>
+          <TabButton active={tab === "booking"} onClick={() => setTab("booking")}>
+            Booking
+          </TabButton>
+          <TabButton active={tab === "conversation"} onClick={() => setTab("conversation")}>
+            Conversation
+          </TabButton>
           <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
             Timeline
           </TabButton>
@@ -508,6 +587,149 @@ export default function LeadDetailPage() {
                 <EmptyState
                   title="No follow-up generated yet"
                   body="Generate a suggestion to see the recommended follow-up type, timing, and ready-to-use message."
+                />
+              </Surface>
+            )}
+          </div>
+        ) : null}
+
+        {tab === "booking" ? (
+          <div className="follow-up-stack">
+            <Surface className="inner-surface">
+              <SectionHeader
+                title="Booking agent"
+                subtitle="Generate the next best booking push based on qualification, booking state, and recent lead momentum."
+              />
+
+              <div className="follow-up-actions">
+                <button
+                  className="button button-primary"
+                  disabled={bookingState.loading}
+                  onClick={handleGenerateBookingSuggestion}
+                  type="button"
+                >
+                  {bookingState.loading ? "Generating…" : "Generate booking suggestion"}
+                </button>
+
+                {lead.booking_status ? (
+                  <StatusPill tone="watch">{lead.booking_status}</StatusPill>
+                ) : null}
+              </div>
+
+              {bookingState.error ? <div className="inline-error">{bookingState.error}</div> : null}
+            </Surface>
+
+            {bookingState.suggestion ? (
+              <div className="follow-up-grid">
+                <Surface className="inner-surface">
+                  <SectionHeader title="Booking strategy" subtitle="Why the booking agent chose this push." />
+                  <div className="detail-list">
+                    <div>
+                      <span>Should push booking</span>
+                      <strong>{bookingState.suggestion.should_push_booking ? "Yes" : "Not yet"}</strong>
+                    </div>
+                    <div>
+                      <span>Booking mode</span>
+                      <strong>{bookingState.suggestion.booking_mode}</strong>
+                    </div>
+                    <div>
+                      <span>Recommended timing</span>
+                      <strong>{bookingState.suggestion.recommended_timing}</strong>
+                    </div>
+                    <div>
+                      <span>Suggested CTA</span>
+                      <strong>{bookingState.suggestion.suggested_cta}</strong>
+                    </div>
+                  </div>
+                  <p className="hero-copy">{bookingState.suggestion.reasoning}</p>
+                </Surface>
+
+                <CopyBlock
+                  label={`Subject line: ${bookingState.suggestion.subject_line}`}
+                  content={bookingState.suggestion.message}
+                />
+              </div>
+            ) : (
+              <Surface className="inner-surface">
+                <EmptyState
+                  title="No booking suggestion generated yet"
+                  body="Generate a booking strategy to see whether the lead should be pushed toward scheduling right now."
+                />
+              </Surface>
+            )}
+          </div>
+        ) : null}
+
+        {tab === "conversation" ? (
+          <div className="follow-up-stack">
+            <Surface className="inner-surface">
+              <SectionHeader
+                title="Conversation agent"
+                subtitle="Paste what the lead just said and generate a context-aware reply for the coach to use live."
+              />
+
+              <div className="lead-state-form">
+                <label className="field">
+                  <span>
+                    Latest lead message
+                    <small>Use the exact objection, hesitation, or reply you want help with.</small>
+                  </span>
+                  <textarea
+                    className="conversation-textarea"
+                    onChange={handleConversationMessageChange}
+                    placeholder="Example: I need to think about it first before making a decision."
+                    value={conversationState.currentMessage}
+                  />
+                </label>
+
+                <div className="follow-up-actions">
+                  <button
+                    className="button button-primary"
+                    disabled={conversationState.loading}
+                    onClick={handleGenerateConversationSuggestion}
+                    type="button"
+                  >
+                    {conversationState.loading ? "Generating…" : "Generate reply"}
+                  </button>
+
+                  {qualification ? (
+                    <StatusPill tone={toneFromAction(qualification.recommended_action)}>
+                      {titleFromAction(qualification.recommended_action)}
+                    </StatusPill>
+                  ) : null}
+                </div>
+              </div>
+
+              {conversationState.error ? <div className="inline-error">{conversationState.error}</div> : null}
+            </Surface>
+
+            {conversationState.suggestion ? (
+              <div className="follow-up-grid">
+                <Surface className="inner-surface">
+                  <SectionHeader
+                    title="Conversation strategy"
+                    subtitle="Why the conversation agent chose this reply path."
+                  />
+                  <div className="detail-list">
+                    <div>
+                      <span>Reply type</span>
+                      <strong>{conversationState.suggestion.reply_type}</strong>
+                    </div>
+                    <div>
+                      <span>Next step</span>
+                      <strong>{conversationState.suggestion.next_step}</strong>
+                    </div>
+                  </div>
+                  <p className="hero-copy">{conversationState.suggestion.reasoning}</p>
+                </Surface>
+
+                <CopyBlock label="Suggested reply" content={conversationState.suggestion.suggested_reply} />
+              </div>
+            ) : (
+              <Surface className="inner-surface">
+                <EmptyState
+                  title="No conversation reply generated yet"
+                  body="Paste the lead's latest message to get a reply suggestion, next step, and reasoning."
                 />
               </Surface>
             )}

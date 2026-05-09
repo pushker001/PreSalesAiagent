@@ -12,7 +12,10 @@ from services.lead_activity_service import create_lead_activity, get_lead_activi
 from schemas.lead_activity import LeadActivityInput, LeadActivityResponse
 from schemas.follow_up import FollowUpSuggestionResponse
 from services.follow_up_service import build_follow_up_suggestion
-
+from schemas.booking import BookingSuggestionResponse
+from services.booking_service import build_booking_suggestion
+from schemas.conversation import ConversationSuggestionResponse, ConversationRequest
+from services.conversation_service import build_conversation_suggestion
 
 logging.basicConfig(
     level=logging.ERROR,
@@ -244,6 +247,102 @@ def generate_follow_up(lead_id:str, db: Session = Depends(get_db)):
 
     return suggestion
 
+# booking suggestion api endpoint
+@app.post("/leads/{lead_id}/booking/generate", response_model=BookingSuggestionResponse)
+def generate_booking_suggestion(lead_id: str, db: Session = Depends(get_db)):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    qualification = get_latest_qualification_by_lead_id(db, lead_id)
+    if not qualification:
+        raise HTTPException(status_code=404, detail="Qualification not found")
+
+    reports = get_reports_by_lead_id(db, lead_id)
+    if not reports:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    latest_report = reports[0]
+    activities = get_lead_activities(db, lead_id)
+
+    suggestion = build_booking_suggestion(
+        lead,
+        qualification,
+        latest_report.full_report_json,
+        activities,
+    )
+
+    create_lead_activity(
+        db,
+        {
+            "lead_id": lead.id,
+            "event_type": "booking_suggestion_generated",
+            "title": "Booking suggestion generated",
+            "details": (
+                f"Booking agent recommended mode {suggestion['booking_mode']} "
+                f"with timing {suggestion['recommended_timing']}."
+            ),
+            "metadata_json": {
+                "booking_mode": suggestion["booking_mode"],
+                "should_push_booking": suggestion["should_push_booking"],
+                "recommended_timing": suggestion["recommended_timing"],
+                "suggested_cta": suggestion["suggested_cta"],
+            },
+        },
+    )
+
+
+    return suggestion
+
+# Conversation endpoint
+
+@app.post("/leads/{lead_id}/conversation/generate", response_model=ConversationSuggestionResponse)
+def generate_conversation_suggestion(
+    lead_id: str,
+    payload: ConversationRequest,
+    db: Session = Depends(get_db),
+):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    qualification = get_latest_qualification_by_lead_id(db, lead_id)
+    if not qualification:
+        raise HTTPException(status_code=404, detail="Qualification not found")
+
+    reports = get_reports_by_lead_id(db, lead_id)
+    if not reports:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    latest_report = reports[0]
+    activities = get_lead_activities(db, lead_id)
+
+    suggestion = build_conversation_suggestion(
+        lead,
+        qualification,
+        latest_report.full_report_json,
+        activities,
+        payload.current_message,
+    )
+
+    create_lead_activity(
+        db,
+        {
+            "lead_id": lead.id,
+            "event_type": "conversation_suggestion_generated",
+            "title": "Conversation suggestion generated",
+            "details": (
+                f"Conversation agent generated a {suggestion['reply_type']} reply "
+                "for the latest lead message."
+            ),
+            "metadata_json": {
+                "reply_type": suggestion["reply_type"],
+                "next_step": suggestion["next_step"],
+            },
+        },
+    )
+
+    return suggestion
 
 
 

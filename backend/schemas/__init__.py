@@ -3,6 +3,8 @@ from schemas.lead_activity import LeadActivityCreate, LeadActivityInput, LeadAct
 from schemas.follow_up import FollowUpSuggestionResponse
 from schemas.qualification import QualificationCreate, QualificationResponse
 from schemas.report import ReportCreate, ReportResponse
+from schemas.booking import BookingSuggestionResponse
+from schemas.conversation import ConversationRequest, ConversationSuggestionResponse
 
 __all__ = [
     "LeadCreate",
@@ -17,4 +19,7 @@ __all__ = [
     "ReportResponse",
     "QualificationCreate",
     "QualificationResponse",
+    "BookingSuggestionResponse",
+    "ConversationRequest",
+    "ConversationSuggestionResponse"
 ]
