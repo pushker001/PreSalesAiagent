@@ -75,6 +75,13 @@ export async function generateConversationSuggestion(leadId, currentMessage) {
   return parseJson(response);
 }
 
+export async function markBookingLinkSent(leadId) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/booking/mark-link-sent`, {
+    method: "POST",
+  });
+  return parseJson(response);
+}
+
 
 export async function analyzeLead(formData, handlers = {}) {
   const { onProgress, onDone } = handlers;

@@ -16,3 +16,13 @@ class RecommendedAction(str, Enum):
     FOLLOW_UP = "follow_up"
     NURTURE = "nurture"
     DISQUALIFY = "disqualify"
+
+class BookingStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    LINK_SENT = "link_sent"
+    REMINDER_SENT = "reminder_sent"
+    CONFIRMED = "confirmed"
+    COMPLETED = "completed"
+    NO_SHOW = "no_show"
+    ABANDONED = "abandoned"
+

@@ -1,4 +1,10 @@
-from models.enums import RecommendedAction
+import json
+import os
+
+from models.enums import BookingStatus, RecommendedAction
+from utils.llm import call_groq
+
+BOOKING_URL = (os.getenv("BOOKING_URL") or "").strip()
 
 
 def extract_booking_signals(lead, qualification, report, activities):
@@ -7,7 +13,7 @@ def extract_booking_signals(lead, qualification, report, activities):
 
     lead_name = getattr(lead, "client_name", "there")
     status = str(getattr(lead, "status", "") or "")
-    booking_status = getattr(lead, "booking_status", None) or ""
+    booking_status = str(getattr(lead, "booking_status", "") or "")
     coach_notes = getattr(lead, "coach_notes", "") or ""
 
     recommended_action = getattr(qualification, "recommended_action", None)
@@ -47,13 +53,17 @@ def extract_booking_signals(lead, qualification, report, activities):
         "has_booking_reminder_sent": "booking_reminder_sent" in event_types,
     }
 
+
 def decide_booking_strategy(signals):
     status = signals["status"]
     booking_status = signals["booking_status"]
     recommended_action = signals["recommended_action"]
     overall_score = signals["overall_score"]
 
-    if status == "booked" or booking_status in {"confirmed", "completed"}:
+    if status == "booked" or booking_status in {
+        BookingStatus.CONFIRMED.value,
+        BookingStatus.COMPLETED.value,
+    }:
         return {
             "should_push_booking": False,
             "booking_mode": "already_booked",
@@ -62,7 +72,16 @@ def decide_booking_strategy(signals):
             "reasoning": "The lead is already booked or has completed the booking process.",
         }
 
-    if booking_status == "link_sent":
+    if booking_status == BookingStatus.REMINDER_SENT.value:
+        return {
+            "should_push_booking": True,
+            "booking_mode": "booking_abandonment_recovery",
+            "recommended_timing": "Within 24-48 hours",
+            "suggested_cta": "Re-open the conversation and remove friction before asking for the booking again.",
+            "reasoning": "A reminder has already been sent and the lead still has not booked, so recovery is the right next move.",
+        }
+
+    if booking_status == BookingStatus.LINK_SENT.value:
         return {
             "should_push_booking": True,
             "booking_mode": "booking_reminder",
@@ -106,18 +125,80 @@ def decide_booking_strategy(signals):
         "reasoning": "The current lead state and interaction history do not yet support a strong booking push.",
     }
 
-def build_booking_suggestion(lead, qualification, report, activities):
-    signals = extract_booking_signals(lead, qualification, report, activities)
-    strategy = decide_booking_strategy(signals)
 
+def generate_booking_message(signals, strategy):
+    objections = signals.get("objections", [])
+    objections_summary = ", ".join(
+        objection.get("objection", "")
+        for objection in objections
+        if isinstance(objection, dict) and objection.get("objection")
+    ) or "No explicit objections recorded."
+
+    booking_url = BOOKING_URL or ""
+
+    prompt = f"""
+You are writing one booking message for a business coach who wants to move a lead toward a scheduled call.
+
+Lead context:
+- Lead name: {signals["lead_name"]}
+- Lead status: {signals["status"]}
+- Booking status: {signals["booking_status"] or BookingStatus.NOT_STARTED.value}
+- Qualification score: {signals["overall_score"]}
+- Qualification reasoning: {signals["qualification_reasoning"]}
+- Recommended action: {signals["recommended_action"]}
+- Buying signals count: {signals["buying_signals_count"]}
+- Pain signals count: {signals["pain_signals_count"]}
+- Urgency level: {signals["urgency_level"]}
+- Coach notes: {signals["coach_notes"] or "No notes yet"}
+- Recent event types: {", ".join(signals["event_types"][:10]) or "No activity yet"}
+- Known objections: {objections_summary}
+
+Booking strategy:
+- Booking mode: {strategy["booking_mode"]}
+- Should push booking: {strategy["should_push_booking"]}
+- Recommended timing: {strategy["recommended_timing"]}
+- Strategy reasoning: {strategy["reasoning"]}
+- Default CTA direction: {strategy["suggested_cta"]}
+- Booking URL: {booking_url or "No booking URL configured"}
+
+Write one strong, natural, concise booking message the coach can send manually.
+
+Requirements:
+- Keep it consultative and confident.
+- Do not sound robotic or overly salesy.
+- Do not mention internal scoring, memory, or systems.
+- Match the booking mode exactly.
+- If a booking URL exists, include it naturally in the message.
+- Return a short subject line and a clear CTA.
+
+Return JSON only with this shape:
+{{
+  "subject_line": "...",
+  "message": "...",
+  "suggested_cta": "..."
+}}
+"""
+
+    raw = call_groq(prompt)
+    parsed = json.loads(raw)
+    return {
+        "subject_line": parsed.get("subject_line", "").strip(),
+        "message": parsed.get("message", "").strip(),
+        "suggested_cta": parsed.get("suggested_cta", "").strip(),
+    }
+
+
+def build_booking_fallback(signals, strategy):
     lead_name = signals["lead_name"]
     booking_mode = strategy["booking_mode"]
+    booking_link_line = f" You can book a time here: {BOOKING_URL}" if BOOKING_URL else ""
 
     subject_line = f"Quick next step, {lead_name}"
     message = (
         f"Hi {lead_name}, I wanted to check in and see whether it makes sense to move this conversation forward. "
         "If you'd like, we can identify the best next step based on where things currently stand."
     )
+    suggested_cta = strategy["suggested_cta"]
 
     if booking_mode == "already_booked":
         subject_line = f"You’re all set, {lead_name}"
@@ -131,36 +212,75 @@ def build_booking_suggestion(lead, qualification, report, activities):
         message = (
             f"Hi {lead_name}, just a quick reminder to grab a time that works for you using the booking link already shared. "
             "If it helps, we can use that session to review your goals and map the best next step together."
+            f"{booking_link_line}"
         )
+        if BOOKING_URL:
+            suggested_cta = "Use the booking link to choose a time that works for you."
+
+    elif booking_mode == "booking_abandonment_recovery":
+        subject_line = f"Still open to this, {lead_name}?"
+        message = (
+            f"Hi {lead_name}, just checking in in case booking a time slipped down the list. "
+            "If it would help, we can keep the next step simple and just use a short call to answer the main questions first."
+            f"{booking_link_line}"
+        )
+        if BOOKING_URL:
+            suggested_cta = "Use the booking link if you want to restart the conversation with a short call."
 
     elif booking_mode == "direct_booking_push":
         subject_line = f"Let’s get a time locked in, {lead_name}"
         message = (
             f"Hi {lead_name}, based on everything we’ve discussed, I think the best next step is to get a call on the calendar. "
             "That way we can move from ideas into a concrete plan and make sure the next move is aligned with your priorities."
+            f"{booking_link_line}"
         )
+        if BOOKING_URL:
+            suggested_cta = "Use the booking link to choose a time that works for you."
 
     elif booking_mode == "proposal_to_booking":
         subject_line = f"Let’s review the proposal together, {lead_name}"
         message = (
             f"Hi {lead_name}, now that you’ve had a chance to review the proposal, the best next step is to book a short call "
             "so we can walk through questions, align on fit, and decide how to move forward."
+            f"{booking_link_line}"
         )
+        if BOOKING_URL:
+            suggested_cta = "Use the booking link to choose a time for a short proposal review call."
 
     elif booking_mode == "post_call_booking_push":
         subject_line = f"Let’s continue the conversation, {lead_name}"
         message = (
             f"Hi {lead_name}, I’d recommend booking the next conversation while the context is still fresh. "
             "That will give us the best chance to keep momentum and turn the discussion into a concrete action plan."
+            f"{booking_link_line}"
         )
+        if BOOKING_URL:
+            suggested_cta = "Use the booking link to lock in the next conversation while momentum is high."
+
+    return {
+        "subject_line": subject_line,
+        "message": message,
+        "suggested_cta": suggested_cta,
+    }
+
+
+def build_booking_suggestion(lead, qualification, report, activities):
+    signals = extract_booking_signals(lead, qualification, report, activities)
+    strategy = decide_booking_strategy(signals)
+
+    try:
+        message_payload = generate_booking_message(signals, strategy)
+    except Exception:
+        message_payload = build_booking_fallback(signals, strategy)
 
     return {
         "should_push_booking": strategy["should_push_booking"],
         "booking_mode": strategy["booking_mode"],
         "recommended_timing": strategy["recommended_timing"],
-        "subject_line": subject_line,
-        "message": message,
-        "suggested_cta": strategy["suggested_cta"],
+        "subject_line": message_payload["subject_line"],
+        "message": message_payload["message"],
+        "suggested_cta": message_payload["suggested_cta"] or strategy["suggested_cta"],
+        "booking_url": BOOKING_URL or None,
         "reasoning": f"{strategy['reasoning']} {signals['qualification_reasoning']}".strip(),
         "context": {
             "status": signals["status"],
@@ -170,6 +290,3 @@ def build_booking_suggestion(lead, qualification, report, activities):
             "recent_event_types": signals["event_types"][:10],
         },
     }
-
-
-

@@ -9,6 +9,7 @@ import {
   generateBookingSuggestion,
   generateConversationSuggestion,
   generateFollowUp,
+  markBookingLinkSent,
   updateLead,
 } from "../lib/api";
 import { formatDate, titleFromAction, toneFromAction } from "../lib/formatters";
@@ -101,6 +102,7 @@ export default function LeadDetailPage() {
     error: "",
     suggestion: null,
   });
+  const [linkSentState, setLinkSentState] = useState({ saving: false, error: "", success: "" });
   const [conversationState, setConversationState] = useState({
     currentMessage: "",
     loading: false,
@@ -244,6 +246,20 @@ export default function LeadDetailPage() {
         error: err.message || "Failed to generate follow-up suggestion.",
         suggestion: null,
       });
+    }
+  }
+
+  async function handleMarkLinkSent() {
+    setLinkSentState({ saving: true, error: "", success: "" });
+    try {
+      const updatedLead = await markBookingLinkSent(leadId);
+      const refreshedActivities = await fetchLeadActivities(leadId).catch(() => activities);
+      setLead(updatedLead);
+      setActivities(refreshedActivities);
+      setLeadStateForm((current) => ({ ...current, booking_status: updatedLead.booking_status || "" }));
+      setLinkSentState({ saving: false, error: "", success: "Booking link marked as sent." });
+    } catch (err) {
+      setLinkSentState({ saving: false, error: err.message || "Failed to mark link sent.", success: "" });
     }
   }
 
@@ -435,10 +451,11 @@ export default function LeadDetailPage() {
                 <option value="">Not set</option>
                 <option value="not_started">Not started</option>
                 <option value="link_sent">Link sent</option>
-                <option value="pending_confirmation">Pending confirmation</option>
+                <option value="reminder_sent">Reminder sent</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="completed">Completed</option>
                 <option value="no_show">No show</option>
+                <option value="abandoned">Abandoned</option>
               </select>
             </label>
           </div>
@@ -640,6 +657,12 @@ export default function LeadDetailPage() {
                       <span>Suggested CTA</span>
                       <strong>{bookingState.suggestion.suggested_cta}</strong>
                     </div>
+                    {bookingState.suggestion.booking_url ? (
+                      <div>
+                        <span>Booking link</span>
+                        <strong>{bookingState.suggestion.booking_url}</strong>
+                      </div>
+                    ) : null}
                   </div>
                   <p className="hero-copy">{bookingState.suggestion.reasoning}</p>
                 </Surface>
@@ -648,6 +671,26 @@ export default function LeadDetailPage() {
                   label={`Subject line: ${bookingState.suggestion.subject_line}`}
                   content={bookingState.suggestion.message}
                 />
+
+                <Surface className="inner-surface">
+                  <SectionHeader
+                    title="Mark as sent"
+                    subtitle="Once you've sent the booking message, mark it here to update the lead state and log it to the timeline."
+                  />
+                  <div className="follow-up-actions">
+                    <button
+                      className="button button-primary"
+                      disabled={linkSentState.saving || lead.booking_status === "link_sent"}
+                      onClick={handleMarkLinkSent}
+                      type="button"
+                    >
+                      {linkSentState.saving ? "Saving…" : lead.booking_status === "link_sent" ? "Link already marked sent" : "Mark link as sent"}
+                    </button>
+                    {lead.booking_status ? <StatusPill tone="watch">{lead.booking_status}</StatusPill> : null}
+                  </div>
+                  {linkSentState.error ? <div className="inline-error">{linkSentState.error}</div> : null}
+                  {linkSentState.success ? <div className="inline-success">{linkSentState.success}</div> : null}
+                </Surface>
               </div>
             ) : (
               <Surface className="inner-surface">

@@ -4,7 +4,7 @@ from sqlalchemy import DateTime, Enum, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
-from models.enums import LeadStatus
+from models.enums import LeadStatus, BookingStatus
 
 
 class Lead(Base):
@@ -25,6 +25,8 @@ class Lead(Base):
     call_goal: Mapped[str] = mapped_column(String(120))
     coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     booking_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
     status: Mapped[LeadStatus] = mapped_column(
         Enum(LeadStatus, name="lead_status"),
         default=LeadStatus.NEW,

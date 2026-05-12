@@ -344,6 +344,28 @@ def generate_conversation_suggestion(
 
     return suggestion
 
+#mark link sent in  booking agent enpoint
+@app.post("/leads/{lead_id}/booking/mark-link-sent", response_model=LeadResponse)
+def mark_booking_link_sent(lead_id: str, db: Session = Depends(get_db)):
+    lead = get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    lead = update_lead(db, lead_id, {"booking_status": "link_sent"})
+
+    create_lead_activity(
+        db,
+        {
+            "lead_id": lead_id,
+            "event_type": "booking_link_sent",
+            "title": "Booking link sent",
+            "details": "Coach marked the booking link as sent to this lead.",
+            "metadata_json": {"booking_status": "link_sent"},
+        },
+    )
+
+    return lead
+
 
 
 
