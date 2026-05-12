@@ -1,5 +1,6 @@
 const API_BASE_URL = "http://localhost:8000";
 
+
 async function parseJson(response) {
   if (!response.ok) {
     const text = await response.text();
@@ -56,6 +57,11 @@ export async function generateFollowUp(leadId) {
   const response = await fetch(`${API_BASE_URL}/leads/${leadId}/follow-up/generate`, {
     method: "POST",
   });
+  return parseJson(response);
+}
+
+export async function fetchDashboardMetrics() {
+  const response = await fetch(`${API_BASE_URL}/dashboard/metrics`);
   return parseJson(response);
 }
 

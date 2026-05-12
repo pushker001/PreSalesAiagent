@@ -16,6 +16,7 @@ from schemas.booking import BookingSuggestionResponse
 from services.booking_service import build_booking_suggestion
 from schemas.conversation import ConversationSuggestionResponse, ConversationRequest
 from services.conversation_service import build_conversation_suggestion
+from services.dashboard_service import get_dashboard_metrics as fetch_dashboard_metrics
 
 logging.basicConfig(
     level=logging.ERROR,
@@ -366,6 +367,10 @@ def mark_booking_link_sent(lead_id: str, db: Session = Depends(get_db)):
 
     return lead
 
+# Dashboard metrics endpoint
+@app.get("/dashboard/metrics")
+def dashboard_metrics(db: Session = Depends(get_db)):
+    return fetch_dashboard_metrics(db)
 
 
 

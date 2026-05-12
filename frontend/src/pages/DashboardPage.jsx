@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchLeadQualification, fetchLeads } from "../lib/api";
+import { fetchLeads, fetchLeadQualification, fetchDashboardMetrics } from "../lib/api";
 import { formatDate, titleFromAction, toneFromAction } from "../lib/formatters";
 import {
   EmptyState,
@@ -12,23 +12,10 @@ import {
   Surface,
 } from "../components/ui";
 
-function deriveMetrics(leads, qualifications) {
-  const total = leads.length;
-  const qualified = qualifications.filter((item) => item?.overall_score >= 55).length;
-  const followUp = qualifications.filter((item) => item?.recommended_action === "follow_up").length;
-  const booked = leads.filter((lead) => lead.status === "booked").length;
-  const averageScore = qualifications.length
-    ? Math.round(
-        qualifications.reduce((sum, item) => sum + (item?.overall_score || 0), 0) / qualifications.length,
-      )
-    : 0;
-
-  return { total, qualified, followUp, booked, averageScore };
-}
-
 export default function DashboardPage() {
   const [leads, setLeads] = useState([]);
   const [qualificationMap, setQualificationMap] = useState({});
+  const [dashboardMetrics, setDashboardMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -40,7 +27,11 @@ export default function DashboardPage() {
       setError("");
 
       try {
-        const leadItems = await fetchLeads();
+        const [leadItems, metricsData] = await Promise.all([
+          fetchLeads(),
+          fetchDashboardMetrics().catch(() => null),
+        ]);
+
         const qualifications = await Promise.all(
           leadItems.map(async (lead) => {
             try {
@@ -55,6 +46,7 @@ export default function DashboardPage() {
         if (!active) return;
 
         setLeads(leadItems);
+        setDashboardMetrics(metricsData);
         setQualificationMap(Object.fromEntries(qualifications));
       } catch (err) {
         if (!active) return;
@@ -102,8 +94,6 @@ export default function DashboardPage() {
     );
   }
 
-  const qualifications = leads.map((lead) => qualificationMap[lead.id]).filter(Boolean);
-  const metrics = deriveMetrics(leads, qualifications);
   const priorityLeads = [...leads]
     .sort(
       (a, b) =>
@@ -134,17 +124,44 @@ export default function DashboardPage() {
       </Surface>
 
       <div className="metrics-grid">
-        <MetricCard label="Total leads" value={metrics.total} detail="All saved opportunities" />
-        <MetricCard label="Qualified" value={metrics.qualified} detail="Score 55 or above" tone="good" />
-        <MetricCard label="Needs follow-up" value={metrics.followUp} detail="Recommended next action" tone="warm" />
-        <MetricCard label="Booked" value={metrics.booked} detail="Lead status booked" />
-        <MetricCard
-          label="Average score"
-          value={metrics.averageScore}
-          detail="Across latest qualifications"
-          tone="watch"
-        />
+        <MetricCard label="Total leads" value={leads.length} detail="All saved opportunities" />
+        <MetricCard label="Avg score" value={dashboardMetrics?.average_qualification_score ?? "—"} detail="Across all qualifications" tone="watch" />
+        <MetricCard label="Booked" value={dashboardMetrics?.qualification_to_booking.booked ?? "—"} detail="Lead status booked" tone="good" />
+        <MetricCard label="Booking rate" value={`${dashboardMetrics?.qualification_to_booking.rate_percent ?? 0}%`} detail="Qualified to booked" tone="warm" />
+        <MetricCard label="AI actions" value={dashboardMetrics?.ai_actions_count ?? "—"} detail="Suggestions generated" />
       </div>
+
+      {dashboardMetrics?.stagnant_leads?.length ? (
+        <Surface>
+          <SectionHeader
+            eyebrow="Attention needed"
+            title="Stagnant leads"
+            subtitle="No activity in the last 7 days and still open."
+          />
+          <div className="recent-list">
+            {dashboardMetrics.stagnant_leads.map((lead) => (
+              <Link className="recent-item" key={lead.id} to={`/leads/${lead.id}`}>
+                <div>
+                  <strong>{lead.client_name}</strong>
+                  <p>{lead.status}</p>
+                </div>
+                <span>{lead.last_activity_at ? formatDate(lead.last_activity_at) : "No activity"}</span>
+              </Link>
+            ))}
+          </div>
+        </Surface>
+      ) : null}
+
+      {dashboardMetrics?.pipeline_breakdown ? (
+        <Surface>
+          <SectionHeader eyebrow="Pipeline" title="Leads by status" subtitle="Current distribution of leads across all stages." />
+          <div className="metrics-grid">
+            {Object.entries(dashboardMetrics.pipeline_breakdown).map(([status, count]) => (
+              <MetricCard key={status} label={status} value={count} detail="leads" />
+            ))}
+          </div>
+        </Surface>
+      ) : null}
 
       <div className="split-layout">
         <Surface>
