@@ -21,7 +21,7 @@ class ClosureAgentOrchestrator:
         self.current_step = 0
         self.total_steps  = 6
  
-    def stream(self, data):
+    def stream(self, data, org_id: str):
         """Generator — yields progress events then final report as NDJSON lines"""
         def emit(event: str, message: str, payload: dict = None):
             line = {"event": event, "step": self.current_step, "total": self.total_steps, "message": message}
@@ -107,7 +107,7 @@ class ClosureAgentOrchestrator:
                     "call_goal": data.call_goal,
                 }
 
-                lead = get_or_create_lead(db, lead_data)
+                lead = get_or_create_lead(db, lead_data, org_id)
                 report_data = {
                     "lead_id": lead.id,
                     "intelligence_score": report.get("intelligence_score", 0),

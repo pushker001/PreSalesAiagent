@@ -11,3 +11,6 @@ tenacity==9.1.4
 sqlalchemy==2.0.44
 psycopg[binary]==3.2.12
 alembic==1.16.5
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9

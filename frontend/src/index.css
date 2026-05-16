@@ -1052,3 +1052,43 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Auth Page ---------- */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: linear-gradient(180deg, var(--bg-elevated), rgba(10, 20, 33, 0.82));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+  padding: 40px;
+  backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-card h1 {
+  margin: 6px 0 4px;
+  font-family: "Fraunces", serif;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  letter-spacing: -0.04em;
+}
+
+.auth-card .lead-state-form {
+  margin-top: 16px;
+}
+
+.auth-card .button-primary {
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px;
+}

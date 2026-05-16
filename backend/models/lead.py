@@ -1,6 +1,7 @@
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
+
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -25,6 +26,8 @@ class Lead(Base):
     call_goal: Mapped[str] = mapped_column(String(120))
     coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     booking_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    org_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+
 
 
     status: Mapped[LeadStatus] = mapped_column(
@@ -58,3 +61,4 @@ class Lead(Base):
     )
     
     memory = relationship("LeadMemory", back_populates="lead", uselist=False, cascade="all, delete-orphan")
+    organization = relationship("Organization", back_populates="leads")

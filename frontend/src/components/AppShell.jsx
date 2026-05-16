@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 
 const navigation = [
   { to: "/dashboard", label: "Dashboard", hint: "Lead priorities" },
@@ -6,6 +7,14 @@ const navigation = [
 ];
 
 export default function AppShell() {
+  const { clearToken } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    clearToken();
+    navigate("/auth");
+  }
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
@@ -35,6 +44,9 @@ export default function AppShell() {
             Prepare faster, qualify better, and move leads into the right next action with
             confidence.
           </p>
+          <button className="button button-ghost" onClick={handleLogout} type="button" style={{ marginTop: "1rem", width: "100%" }}>
+            Sign out
+          </button>
         </div>
       </aside>
 
