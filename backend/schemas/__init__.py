@@ -5,6 +5,7 @@ from schemas.qualification import QualificationCreate, QualificationResponse
 from schemas.report import ReportCreate, ReportResponse
 from schemas.booking import BookingSuggestionResponse
 from schemas.conversation import ConversationRequest, ConversationSuggestionResponse
+from schemas.agent_action import AgentActionCreate, AgentActionResponse, AgentActionStatusUpdate
 
 __all__ = [
     "LeadCreate",
@@ -21,5 +22,8 @@ __all__ = [
     "QualificationResponse",
     "BookingSuggestionResponse",
     "ConversationRequest",
-    "ConversationSuggestionResponse"
+    "ConversationSuggestionResponse",
+    "AgentActionCreate",
+    "AgentActionResponse",
+    "AgentActionStatusUpdate"
 ]

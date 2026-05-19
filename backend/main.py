@@ -20,6 +20,19 @@ from services.dashboard_service import get_dashboard_metrics as fetch_dashboard_
 from schemas.auth import SignupRequest, LoginRequest, TokenResponse, UserResponse
 from services.auth_service import signup_user, login_user, create_access_token
 from middleware.auth import get_current_user
+from schemas.agent_action import AgentActionResponse
+from services.agent_action_service import (
+    approve_agent_action,
+    complete_agent_action,
+    dismiss_agent_action,
+    find_open_agent_action,
+    get_agent_actions,
+    mark_agent_action_sent,
+    create_agent_action,
+)
+from models.enums import AgentActionPriority, AgentActionType, AgentName
+
+
 
 logging.basicConfig(
     level=logging.ERROR,
@@ -230,7 +243,41 @@ def generate_follow_up(lead_id: str, db: Session = Depends(get_db), current_user
     if not reports:
         raise HTTPException(status_code=404, detail="Reports not found")
     activities = get_lead_activities(db, lead_id)
-    return build_follow_up_suggestion(lead, qualification, reports[0].full_report_json, activities)
+    suggestion = build_follow_up_suggestion(lead, qualification, reports[0].full_report_json, activities)
+    
+    action_type = AgentActionType.SEND_FOLLOW_UP
+    existing_action = find_open_agent_action(db, current_user.org_id, lead.id, action_type)
+    
+    if not existing_action:
+        create_agent_action(db, {
+            "org_id": current_user.org_id,
+            "lead_id": lead.id,
+            "agent_name": AgentName.FOLLOW_UP,
+            "action_type": action_type,
+            "priority": AgentActionPriority.MEDIUM,
+            "title": suggestion["subject_line"],
+            "message": suggestion["message"],
+            "cta": None,
+            "reasoning": suggestion["reasoning"],
+            "metadata_json": {
+                "follow_up_type": suggestion["follow_up_type"],
+                "recommended_timing": suggestion["recommended_timing"],
+                "source": "follow_up_generate_endpoint",
+            },
+        })
+        
+    create_lead_activity(db, {
+        "lead_id": lead.id,
+        "event_type": "follow_up_suggestion_generated",
+        "title": "Follow-up suggestion generated",
+        "details": f"Follow-up agent recommended type {suggestion['follow_up_type']} with timing {suggestion['recommended_timing']}.",
+        "metadata_json": {
+            "follow_up_type": suggestion["follow_up_type"],
+            "recommended_timing": suggestion["recommended_timing"],
+        },
+    })
+    
+    return suggestion
 
 
 @app.post("/leads/{lead_id}/booking/generate", response_model=BookingSuggestionResponse)
@@ -246,6 +293,36 @@ def generate_booking_suggestion(lead_id: str, db: Session = Depends(get_db), cur
         raise HTTPException(status_code=404, detail="Report not found")
     activities = get_lead_activities(db, lead_id)
     suggestion = build_booking_suggestion(lead, qualification, reports[0].full_report_json, activities)
+
+    if suggestion["should_push_booking"]:
+        action_type = AgentActionType.SEND_BOOKING_LINK
+
+        if suggestion["booking_mode"] == "booking_reminder":
+            action_type = AgentActionType.SEND_BOOKING_REMINDER
+
+        if suggestion["booking_mode"] == "booking_abandonment_recovery":
+            action_type = AgentActionType.SEND_RECOVERY_MESSAGE
+
+        existing_action = find_open_agent_action(db, current_user.org_id, lead.id, action_type)
+
+        if not existing_action:
+            create_agent_action(db, {
+                "org_id": current_user.org_id,
+                "lead_id": lead.id,
+                "agent_name": AgentName.BOOKING,
+                "action_type": action_type,
+                "priority": AgentActionPriority.HIGH,
+                "title": suggestion["subject_line"],
+                "message": suggestion["message"],
+                "cta": suggestion["suggested_cta"],
+                "reasoning": suggestion["reasoning"],
+                "metadata_json": {
+                    "booking_mode": suggestion["booking_mode"],
+                    "recommended_timing": suggestion["recommended_timing"],
+                    "booking_url": suggestion.get("booking_url"),
+                    "source": "booking_generate_endpoint",
+                },
+            })
     create_lead_activity(db, {
         "lead_id": lead.id,
         "event_type": "booking_suggestion_generated",
@@ -274,6 +351,34 @@ def generate_conversation_suggestion(lead_id: str, payload: ConversationRequest,
         raise HTTPException(status_code=404, detail="Report not found")
     activities = get_lead_activities(db, lead_id)
     suggestion = build_conversation_suggestion(lead, qualification, reports[0].full_report_json, activities, payload.current_message)
+    
+    reply_type = suggestion["reply_type"]
+    action_type = AgentActionType.SEND_FOLLOW_UP
+    priority = AgentActionPriority.MEDIUM
+    
+    if reply_type == "objection_response":
+        action_type = AgentActionType.HANDLE_OBJECTION
+        priority = AgentActionPriority.HIGH
+    elif reply_type == "booking_push":
+        action_type = AgentActionType.SEND_BOOKING_LINK
+        priority = AgentActionPriority.HIGH
+        
+    create_agent_action(db, {
+        "org_id": current_user.org_id,
+        "lead_id": lead.id,
+        "agent_name": AgentName.CONVERSATION,
+        "action_type": action_type,
+        "priority": priority,
+        "title": "Conversation Reply",
+        "message": suggestion["suggested_reply"],
+        "cta": suggestion["next_step"],
+        "reasoning": suggestion["reasoning"],
+        "metadata_json": {
+            "reply_type": suggestion["reply_type"],
+            "source": "conversation_generate_endpoint",
+        },
+    })
+
     create_lead_activity(db, {
         "lead_id": lead.id,
         "event_type": "conversation_suggestion_generated",
@@ -303,6 +408,125 @@ def mark_booking_link_sent(lead_id: str, db: Session = Depends(get_db), current_
 @app.get("/dashboard/metrics")
 def dashboard_metrics(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     return fetch_dashboard_metrics(db, current_user.org_id)
+
+# ---------- Agent Action Endpoints ----------
+@app.get("/agent-actions", response_model=list[AgentActionResponse])
+def list_agent_actions(
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return get_agent_actions(db, current_user.org_id, status)
+
+
+@app.post("/agent-actions/{action_id}/approve", response_model=AgentActionResponse)
+def approve_action(
+    action_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    action = approve_agent_action(db, action_id, current_user.org_id, current_user.id)
+    if not action:
+        raise HTTPException(status_code=404, detail="Agent action not found")
+    return action
+
+
+@app.post("/agent-actions/{action_id}/dismiss", response_model=AgentActionResponse)
+def dismiss_action(
+    action_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    action = dismiss_agent_action(db, action_id, current_user.org_id)
+    if not action:
+        raise HTTPException(status_code=404, detail="Agent action not found")
+    return action
+
+
+@app.post("/agent-actions/{action_id}/mark-sent", response_model=AgentActionResponse)
+def mark_action_sent(
+    action_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    action = mark_agent_action_sent(db, action_id, current_user.org_id)
+    if not action:
+        raise HTTPException(status_code=404, detail="Agent action not found")
+
+    create_lead_activity(db, {
+        "lead_id": action.lead_id,
+        "event_type": "agent_action_sent",
+        "title": "Agent action marked as sent",
+        "details": f"{action.agent_name} action {action.action_type} was marked as sent.",
+        "metadata_json": {
+            "action_id": action.id,
+            "agent_name": str(action.agent_name),
+            "action_type": str(action.action_type),
+        },
+    })
+
+    if action.action_type == AgentActionType.SEND_BOOKING_LINK:
+        update_lead(
+            db,
+            action.lead_id,
+            {"booking_status": "link_sent"},
+            current_user.org_id,
+        )
+
+        create_lead_activity(db, {
+            "lead_id": action.lead_id,
+            "event_type": "booking_link_sent",
+            "title": "Booking link sent",
+            "details": "Booking link was marked as sent from an agent action.",
+            "metadata_json": {
+                "action_id": action.id,
+                "booking_status": "link_sent",
+            },
+        })
+
+    if action.action_type == AgentActionType.SEND_BOOKING_REMINDER:
+        update_lead(
+            db,
+            action.lead_id,
+            {"booking_status": "reminder_sent"},
+            current_user.org_id,
+        )
+
+        create_lead_activity(db, {
+            "lead_id": action.lead_id,
+            "event_type": "booking_reminder_sent",
+            "title": "Booking reminder sent",
+            "details": "Booking reminder was marked as sent from an agent action.",
+            "metadata_json": {
+                "action_id": action.id,
+                "booking_status": "reminder_sent",
+            },
+        })
+
+    if action.action_type == AgentActionType.SEND_RECOVERY_MESSAGE:
+        create_lead_activity(db, {
+            "lead_id": action.lead_id,
+            "event_type": "booking_recovery_sent",
+            "title": "Booking recovery message sent",
+            "details": "Booking recovery message was marked as sent from an agent action.",
+            "metadata_json": {
+                "action_id": action.id,
+            },
+        })
+
+    return action
+
+
+@app.post("/agent-actions/{action_id}/complete", response_model=AgentActionResponse)
+def complete_action(
+    action_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    action = complete_agent_action(db, action_id, current_user.org_id)
+    if not action:
+        raise HTTPException(status_code=404, detail="Agent action not found")
+    return action
 
 
 # ---------- Streaming Endpoint ----------

@@ -95,6 +95,44 @@ export async function fetchDashboardMetrics() {
   return parseJson(response);
 }
 
+export async function fetchAgentActions(status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await fetch(`${API_BASE_URL}/agent-actions${query}`, { headers: authHeaders() });
+  return parseJson(response);
+}
+
+export async function approveAgentAction(actionId) {
+  const response = await fetch(`${API_BASE_URL}/agent-actions/${actionId}/approve`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return parseJson(response);
+}
+
+export async function dismissAgentAction(actionId) {
+  const response = await fetch(`${API_BASE_URL}/agent-actions/${actionId}/dismiss`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return parseJson(response);
+}
+
+export async function markAgentActionSent(actionId) {
+  const response = await fetch(`${API_BASE_URL}/agent-actions/${actionId}/mark-sent`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return parseJson(response);
+}
+
+export async function completeAgentAction(actionId) {
+  const response = await fetch(`${API_BASE_URL}/agent-actions/${actionId}/complete`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return parseJson(response);
+}
+
 export async function generateBookingSuggestion(leadId) {
   const response = await fetch(`${API_BASE_URL}/leads/${leadId}/booking/generate`, {
     method: "POST",

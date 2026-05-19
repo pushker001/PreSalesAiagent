@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchLeads, fetchLeadQualification, fetchDashboardMetrics } from "../lib/api";
+import {
+  approveAgentAction,
+  dismissAgentAction,
+  fetchAgentActions,
+  fetchDashboardMetrics,
+  fetchLeads,
+  fetchLeadQualification,
+  markAgentActionSent,
+} from "../lib/api";
 import { formatDate, titleFromAction, toneFromAction } from "../lib/formatters";
 import {
   EmptyState,
@@ -16,8 +24,11 @@ export default function DashboardPage() {
   const [leads, setLeads] = useState([]);
   const [qualificationMap, setQualificationMap] = useState({});
   const [dashboardMetrics, setDashboardMetrics] = useState(null);
+  const [agentActions, setAgentActions] = useState([]);
+  const [actionBusyId, setActionBusyId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -27,9 +38,10 @@ export default function DashboardPage() {
       setError("");
 
       try {
-        const [leadItems, metricsData] = await Promise.all([
+        const [leadItems, metricsData, pendingActions] = await Promise.all([
           fetchLeads(),
           fetchDashboardMetrics().catch(() => null),
+          fetchAgentActions("pending_review").catch(() => []),
         ]);
 
         const qualifications = await Promise.all(
@@ -47,6 +59,7 @@ export default function DashboardPage() {
 
         setLeads(leadItems);
         setDashboardMetrics(metricsData);
+        setAgentActions(pendingActions || []);
         setQualificationMap(Object.fromEntries(qualifications));
       } catch (err) {
         if (!active) return;
@@ -61,6 +74,25 @@ export default function DashboardPage() {
       active = false;
     };
   }, []);
+
+  async function refreshAgentActions() {
+    const pendingActions = await fetchAgentActions("pending_review").catch(() => []);
+    setAgentActions(pendingActions || []);
+  }
+
+  async function handleActionMutation(actionId, mutation) {
+    setActionBusyId(actionId);
+    setActionError("");
+
+    try {
+      await mutation(actionId);
+      await refreshAgentActions();
+    } catch (err) {
+      setActionError(err.message || "Failed to update agent action.");
+    } finally {
+      setActionBusyId("");
+    }
+  }
 
   if (loading) {
     return <LoadingState title="Loading dashboard" body="Gathering lead activity and qualification signals." />;
@@ -100,6 +132,7 @@ export default function DashboardPage() {
         (qualificationMap[b.id]?.overall_score || 0) - (qualificationMap[a.id]?.overall_score || 0),
     )
     .slice(0, 3);
+  const leadNameById = Object.fromEntries(leads.map((lead) => [lead.id, lead.client_name]));
 
   return (
     <div className="page-stack">
@@ -162,6 +195,75 @@ export default function DashboardPage() {
           </div>
         </Surface>
       ) : null}
+
+      <Surface>
+        <SectionHeader
+          eyebrow="Agent actions"
+          title="Action inbox"
+          subtitle="AI-created sales actions waiting for coach review."
+        />
+
+        {actionError ? <div className="inline-error">{actionError}</div> : null}
+
+        {agentActions.length ? (
+          <div className="action-inbox-list">
+            {agentActions.map((action) => (
+              <article className="action-card" key={action.id}>
+                <div className="action-card-main">
+                  <div className="action-card-head">
+                    <StatusPill tone={action.priority === "high" || action.priority === "urgent" ? "warm" : "watch"}>
+                      {action.priority}
+                    </StatusPill>
+                    <StatusPill>{action.status}</StatusPill>
+                  </div>
+                  <h3>{action.title}</h3>
+                  <p>{action.message || "No message generated for this action yet."}</p>
+                  {action.cta ? <small>{action.cta}</small> : null}
+                  <div className="action-card-meta">
+                    <span>{action.agent_name}</span>
+                    <span>{action.action_type}</span>
+                    <Link to={`/leads/${action.lead_id}`}>
+                      {leadNameById[action.lead_id] || "Open lead"}
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="action-card-controls">
+                  <button
+                    className="button button-primary"
+                    disabled={actionBusyId === action.id}
+                    onClick={() => handleActionMutation(action.id, approveAgentAction)}
+                    type="button"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    className="button button-ghost"
+                    disabled={actionBusyId === action.id}
+                    onClick={() => handleActionMutation(action.id, markAgentActionSent)}
+                    type="button"
+                  >
+                    Mark sent
+                  </button>
+                  <button
+                    className="button button-ghost"
+                    disabled={actionBusyId === action.id}
+                    onClick={() => handleActionMutation(action.id, dismissAgentAction)}
+                    type="button"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No pending actions"
+            body="When agents create sales actions, they will appear here for review."
+          />
+        )}
+      </Surface>
 
       <div className="split-layout">
         <Surface>

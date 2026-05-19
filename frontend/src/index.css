@@ -558,7 +558,8 @@ a {
 .priority-list,
 .recent-list,
 .timeline-list,
-.report-history-list {
+.report-history-list,
+.action-inbox-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -566,7 +567,8 @@ a {
 
 .priority-item,
 .recent-item,
-.history-item {
+.history-item,
+.action-card {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -575,6 +577,56 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+}
+
+.action-card {
+  align-items: flex-start;
+}
+
+.action-card-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-card-head,
+.action-card-meta,
+.action-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.action-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.action-card p {
+  margin: 0;
+  color: var(--muted-strong);
+  line-height: 1.7;
+}
+
+.action-card small,
+.action-card-meta {
+  color: var(--muted);
+}
+
+.action-card-meta {
+  font-size: 0.88rem;
+}
+
+.action-card-meta a {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.action-card-controls {
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .history-item {

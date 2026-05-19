@@ -26,3 +26,32 @@ class BookingStatus(str, Enum):
     NO_SHOW = "no_show"
     ABANDONED = "abandoned"
 
+class AgentName(str, Enum):
+    BOOKING = "booking_agent"
+    Qualification = "qualification_agent"
+    FOLLOW_UP = "follow_up_agent"
+    CONVERSATION = "conversation_agent"
+
+class AgentActionType(str, Enum):
+    SEND_FOLLOW_UP = "send_follow_up"
+    SEND_BOOKING_LINK = "send_booking_link"
+    SEND_BOOKING_REMINDER = "send_booking_reminder"
+    SEND_RECOVERY_MESSAGE = "send_recovery_message"
+    HANDLE_OBJECTION = "handle_objection"
+    ESCALATE_TO_COACH = "escalate_to_coach"
+
+
+class AgentActionStatus(str, Enum):
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    SENT = "sent"
+    COMPLETED = "completed"
+    DISMISSED = "dismissed"
+    FAILED = "failed"
+
+
+class AgentActionPriority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"

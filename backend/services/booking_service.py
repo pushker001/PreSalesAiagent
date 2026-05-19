@@ -117,6 +117,20 @@ def decide_booking_strategy(signals):
             "reasoning": "A call has already happened and the lead is in a qualified stage, so booking is the logical next step.",
         }
 
+    if (
+        overall_score >= 55
+        and signals["buying_signals_count"] >= 3
+        and signals["pain_signals_count"] >= 2
+        and signals["urgency_level"] in {"medium", "high"}
+    ):
+        return {
+            "should_push_booking": True,
+            "booking_mode": "soft_booking_push",
+            "recommended_timing": "Within 24-48 hours",
+            "suggested_cta": "Offer a short, low-pressure call to clarify the best next step.",
+            "reasoning": "The lead shows enough buying and pain signals to justify a soft booking prompt.",
+        }
+
     return {
         "should_push_booking": False,
         "booking_mode": "not_ready",
@@ -256,6 +270,16 @@ def build_booking_fallback(signals, strategy):
         )
         if BOOKING_URL:
             suggested_cta = "Use the booking link to lock in the next conversation while momentum is high."
+
+    elif booking_mode == "soft_booking_push":
+        subject_line = f"Worth a quick conversation, {lead_name}?"
+        message = (
+            f"Hi {lead_name}, based on where things stand, it may be useful to have a short, low-pressure conversation "
+            "to clarify what matters most and see whether there is a practical next step."
+            f"{booking_link_line}"
+        )
+        if BOOKING_URL:
+            suggested_cta = "Use the booking link to choose a time for a short clarity call."
 
     return {
         "subject_line": subject_line,
