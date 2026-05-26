@@ -55,3 +55,14 @@ class AgentActionPriority(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
+
+
+class SystemEventType(str, Enum):
+    LEAD_CREATED = "lead_created"
+    ANALYSIS_COMPLETED = "analysis_completed"
+    QUALIFICATION_CREATED = "qualification_created"
+    BOOKING_LINK_SENT = "booking_link_sent"
+    BOOKING_CONFIRMED = "booking_confirmed"
+    FOLLOW_UP_SENT = "follow_up_sent"
+    CONVERSATION_REPLY_GENERATED = "conversation_reply_generated"
+    PROPOSAL_SENT = "proposal_sent"

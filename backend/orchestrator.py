@@ -12,6 +12,9 @@ from services.lead_service import get_or_create_lead
 from services.reports_service import create_report
 from services.qualification_service import build_qualification_data, create_qualification
 from services.lead_activity_service import create_lead_activity
+from models.enums import SystemEventType
+from services.event_service import publish_event
+
 
 
 
@@ -115,34 +118,32 @@ class ClosureAgentOrchestrator:
                 }
                 saved_report = create_report(db, report_data)
                 # lead activity 
-                create_lead_activity(
-                    db,
-                    {
-                        "lead_id": lead.id,
-                        "event_type": "analysis_created",
-                        "title": "Analysis completed",
-                        "details": "A new AI lead analysis report was generated and saved.",
-                        "metadata_json": {
-                            "report_id": saved_report.id,
-                            "intelligence_score": saved_report.intelligence_score,
-                        },
+                publish_event(
+                    db=db,
+                    event_type=SystemEventType.ANALYSIS_COMPLETED,
+                    lead_id=lead.id,
+                    org_id=org_id,
+                    title="Analysis completed",
+                    details="A new AI lead analysis report was generated and saved.",
+                    metadata={
+                        "report_id": saved_report.id,
+                        "intelligence_score": saved_report.intelligence_score,
                     },
                 )
 
                 qualification_data = build_qualification_data(report, lead, saved_report)
                 saved_qualification = create_qualification(db, qualification_data)
-                create_lead_activity(
-                    db,
-                    {
-                        "lead_id": lead.id,
-                        "event_type": "qualification_created",
-                        "title": "Qualification created",
-                        "details": f"Lead qualified with score {saved_qualification.overall_score}.",
-                        "metadata_json": {
-                            "qualification_id": saved_qualification.id,
-                            "overall_score": saved_qualification.overall_score,
-                            "recommended_action": str(saved_qualification.recommended_action),
-                        },
+                publish_event(
+                    db=db,
+                    event_type=SystemEventType.QUALIFICATION_CREATED,
+                    lead_id=lead.id,
+                    org_id=org_id,
+                    title="Qualification created",
+                    details=f"Lead qualified with score {saved_qualification.overall_score}.",
+                    metadata={
+                        "qualification_id": saved_qualification.id,
+                        "score": saved_qualification.overall_score,
+                        "recommended_action": str(saved_qualification.recommended_action),
                     },
                 )
                 qualification_id = saved_qualification.id

@@ -30,7 +30,8 @@ from services.agent_action_service import (
     mark_agent_action_sent,
     create_agent_action,
 )
-from models.enums import AgentActionPriority, AgentActionType, AgentName
+from models.enums import AgentActionPriority, AgentActionType, AgentName, SystemEventType
+from services.event_service import publish_event
 
 
 
@@ -395,13 +396,15 @@ def mark_booking_link_sent(lead_id: str, db: Session = Depends(get_db), current_
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     lead = update_lead(db, lead_id, {"booking_status": "link_sent"}, current_user.org_id)
-    create_lead_activity(db, {
-        "lead_id": lead_id,
-        "event_type": "booking_link_sent",
-        "title": "Booking link sent",
-        "details": "Coach marked the booking link as sent to this lead.",
-        "metadata_json": {"booking_status": "link_sent"},
-    })
+    publish_event(
+        db=db,
+        event_type=SystemEventType.BOOKING_LINK_SENT,
+        lead_id=lead_id,
+        org_id=current_user.org_id,
+        title="Booking link sent",
+        details="Coach marked the booking link as sent to this lead.",
+        metadata={"booking_status": "link_sent"},
+    )
     return lead
 
 
@@ -473,16 +476,18 @@ def mark_action_sent(
             current_user.org_id,
         )
 
-        create_lead_activity(db, {
-            "lead_id": action.lead_id,
-            "event_type": "booking_link_sent",
-            "title": "Booking link sent",
-            "details": "Booking link was marked as sent from an agent action.",
-            "metadata_json": {
+        publish_event(
+            db=db,
+            event_type=SystemEventType.BOOKING_LINK_SENT,
+            lead_id=action.lead_id,
+            org_id=current_user.org_id,
+            title="Booking link sent",
+            details="Booking link was marked as sent from an agent action.",
+            metadata={
                 "action_id": action.id,
                 "booking_status": "link_sent",
             },
-        })
+        )
 
     if action.action_type == AgentActionType.SEND_BOOKING_REMINDER:
         update_lead(
