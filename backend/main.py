@@ -497,27 +497,39 @@ def mark_action_sent(
             current_user.org_id,
         )
 
-        create_lead_activity(db, {
-            "lead_id": action.lead_id,
-            "event_type": "booking_reminder_sent",
-            "title": "Booking reminder sent",
-            "details": "Booking reminder was marked as sent from an agent action.",
-            "metadata_json": {
+        publish_event(
+            db=db,
+            event_type=SystemEventType.BOOKING_REMINDER_SENT,
+            lead_id=action.lead_id,
+            org_id=current_user.org_id,
+            title="Booking reminder sent",
+            details="Booking reminder was marked as sent from an agent action.",
+            metadata={
                 "action_id": action.id,
                 "booking_status": "reminder_sent",
             },
-        })
+        )
 
     if action.action_type == AgentActionType.SEND_RECOVERY_MESSAGE:
-        create_lead_activity(db, {
-            "lead_id": action.lead_id,
-            "event_type": "booking_recovery_sent",
-            "title": "Booking recovery message sent",
-            "details": "Booking recovery message was marked as sent from an agent action.",
-            "metadata_json": {
+        update_lead(
+            db,
+            action.lead_id,
+            {"booking_status": "abandoned"},
+            current_user.org_id,
+        )
+
+        publish_event(
+            db=db,
+            event_type=SystemEventType.BOOKING_RECOVERY_SENT,
+            lead_id=action.lead_id,
+            org_id=current_user.org_id,
+            title="Booking recovery message sent",
+            details="Booking recovery message was marked as sent from an agent action.",
+            metadata={
                 "action_id": action.id,
+                "booking_status": "abandoned",
             },
-        })
+        )
 
     return action
 

@@ -72,6 +72,15 @@ def decide_booking_strategy(signals):
             "reasoning": "The lead is already booked or has completed the booking process.",
         }
 
+    if booking_status == BookingStatus.ABANDONED.value:
+        return {
+            "should_push_booking": False,
+            "booking_mode": "booking_recovery_completed",
+            "recommended_timing": "No further booking push",
+            "suggested_cta": "Escalate to the coach or continue nurture manually.",
+            "reasoning": "A recovery message has already been sent, so the workflow should not keep creating booking recovery actions.",
+        }
+
     if booking_status == BookingStatus.REMINDER_SENT.value:
         return {
             "should_push_booking": True,

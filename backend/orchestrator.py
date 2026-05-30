@@ -143,7 +143,7 @@ class ClosureAgentOrchestrator:
                     metadata={
                         "qualification_id": saved_qualification.id,
                         "score": saved_qualification.overall_score,
-                        "recommended_action": str(saved_qualification.recommended_action),
+                        "recommended_action": saved_qualification.recommended_action.value,
                     },
                 )
                 qualification_id = saved_qualification.id

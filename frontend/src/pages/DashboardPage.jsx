@@ -10,6 +10,7 @@ import {
   markAgentActionSent,
 } from "../lib/api";
 import { formatDate, titleFromAction, toneFromAction } from "../lib/formatters";
+import ActionCard from "../components/ActionCard";
 import {
   EmptyState,
   LoadingState,
@@ -19,6 +20,7 @@ import {
   StatusPill,
   Surface,
 } from "../components/ui";
+
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState([]);
@@ -30,6 +32,15 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
 
+  async function fetchOpenAgentActions() {
+    const [pendingActions, approvedActions] = await Promise.all([
+      fetchAgentActions("pending_review").catch(() => []),
+      fetchAgentActions("approved").catch(() => []),
+    ]);
+
+    return [...(pendingActions || []), ...(approvedActions || [])];
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -38,10 +49,10 @@ export default function DashboardPage() {
       setError("");
 
       try {
-        const [leadItems, metricsData, pendingActions] = await Promise.all([
+        const [leadItems, metricsData, openActions] = await Promise.all([
           fetchLeads(),
           fetchDashboardMetrics().catch(() => null),
-          fetchAgentActions("pending_review").catch(() => []),
+          fetchOpenAgentActions(),
         ]);
 
         const qualifications = await Promise.all(
@@ -59,7 +70,7 @@ export default function DashboardPage() {
 
         setLeads(leadItems);
         setDashboardMetrics(metricsData);
-        setAgentActions(pendingActions || []);
+        setAgentActions(openActions || []);
         setQualificationMap(Object.fromEntries(qualifications));
       } catch (err) {
         if (!active) return;
@@ -76,8 +87,8 @@ export default function DashboardPage() {
   }, []);
 
   async function refreshAgentActions() {
-    const pendingActions = await fetchAgentActions("pending_review").catch(() => []);
-    setAgentActions(pendingActions || []);
+    const openActions = await fetchOpenAgentActions();
+    setAgentActions(openActions || []);
   }
 
   async function handleActionMutation(actionId, mutation) {
@@ -132,7 +143,13 @@ export default function DashboardPage() {
         (qualificationMap[b.id]?.overall_score || 0) - (qualificationMap[a.id]?.overall_score || 0),
     )
     .slice(0, 3);
-  const leadNameById = Object.fromEntries(leads.map((lead) => [lead.id, lead.client_name]));
+  const isHighPriorityAction = (action) => {
+    const priority = String(action.priority || "").toLowerCase();
+    return priority === "high" || priority === "urgent";
+  };
+
+  const highPriorityActions = agentActions.filter(isHighPriorityAction);
+  const standardPriorityActions = agentActions.filter((action) => !isHighPriorityAction(action));
 
   return (
     <div className="page-stack">
@@ -207,55 +224,49 @@ export default function DashboardPage() {
 
         {agentActions.length ? (
           <div className="action-inbox-list">
-            {agentActions.map((action) => (
-              <article className="action-card" key={action.id}>
-                <div className="action-card-main">
-                  <div className="action-card-head">
-                    <StatusPill tone={action.priority === "high" || action.priority === "urgent" ? "warm" : "watch"}>
-                      {action.priority}
-                    </StatusPill>
-                    <StatusPill>{action.status}</StatusPill>
-                  </div>
-                  <h3>{action.title}</h3>
-                  <p>{action.message || "No message generated for this action yet."}</p>
-                  {action.cta ? <small>{action.cta}</small> : null}
-                  <div className="action-card-meta">
-                    <span>{action.agent_name}</span>
-                    <span>{action.action_type}</span>
-                    <Link to={`/leads/${action.lead_id}`}>
-                      {leadNameById[action.lead_id] || "Open lead"}
-                    </Link>
-                  </div>
-                </div>
-
-                <div className="action-card-controls">
-                  <button
-                    className="button button-primary"
-                    disabled={actionBusyId === action.id}
-                    onClick={() => handleActionMutation(action.id, approveAgentAction)}
-                    type="button"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    className="button button-ghost"
-                    disabled={actionBusyId === action.id}
-                    onClick={() => handleActionMutation(action.id, markAgentActionSent)}
-                    type="button"
-                  >
-                    Mark sent
-                  </button>
-                  <button
-                    className="button button-ghost"
-                    disabled={actionBusyId === action.id}
-                    onClick={() => handleActionMutation(action.id, dismissAgentAction)}
-                    type="button"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </article>
-            ))}
+            {highPriorityActions.length > 0 && (
+              <div className="action-group">
+                <h4 style={{ color: "var(--tone-warm-text)", marginBottom: "1rem" }}>Requires immediate attention</h4>
+                {highPriorityActions.map((action) => {
+                  const lead = leads.find(l => l.id === action.lead_id);
+                  const qualification = qualificationMap[action.lead_id];
+                  return (
+                    <ActionCard 
+                      key={action.id}
+                      action={action}
+                      lead={lead}
+                      qualification={qualification}
+                      actionBusyId={actionBusyId}
+                      onApprove={(id) => handleActionMutation(id, approveAgentAction)}
+                      onMarkSent={(id) => handleActionMutation(id, markAgentActionSent)}
+                      onDismiss={(id) => handleActionMutation(id, dismissAgentAction)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+            
+            {standardPriorityActions.length > 0 && (
+              <div className="action-group">
+                <h4 style={{ marginTop: "1.5rem", marginBottom: "1rem" }}>Standard priority</h4>
+                {standardPriorityActions.map((action) => {
+                  const lead = leads.find(l => l.id === action.lead_id);
+                  const qualification = qualificationMap[action.lead_id];
+                  return (
+                    <ActionCard 
+                      key={action.id}
+                      action={action}
+                      lead={lead}
+                      qualification={qualification}
+                      actionBusyId={actionBusyId}
+                      onApprove={(id) => handleActionMutation(id, approveAgentAction)}
+                      onMarkSent={(id) => handleActionMutation(id, markAgentActionSent)}
+                      onDismiss={(id) => handleActionMutation(id, dismissAgentAction)}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : (
           <EmptyState

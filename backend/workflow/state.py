@@ -16,3 +16,4 @@ class LeadLifecycleState(TypedDict):
     requires_approval: bool
     next_wait_until: Optional[datetime]
     outcome: str
+    metadata: dict

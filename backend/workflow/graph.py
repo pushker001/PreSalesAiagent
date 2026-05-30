@@ -17,7 +17,11 @@ def route_trigger(state: LeadLifecycleState):
     
     if event == "qualification_created":
         return "run_booking"
-    elif event == "booking_link_sent":
+    elif event in {
+        "booking_link_sent",
+        "booking_reminder_sent",
+        "booking_recovery_sent",
+    }:
         return "run_booking"
     elif event == "proposal_sent":
         return "run_follow_up"

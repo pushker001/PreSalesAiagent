@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from models.enums import SystemEventType
 from services.lead_activity_service import create_lead_activity
 # We will create this in Step 3!
-from services.trigger_engine import evaluate_triggers
+from services.workflow_service import run_lead_lifecycle_workflow
 
 def publish_event(
     db: Session,
@@ -31,6 +31,11 @@ def publish_event(
     
     # 2. Fire the Trigger Engine to evaluate rules
     # We pass org_id down because the Agent Actions need to know which org they belong to
-    evaluate_triggers(db, event_type, lead_id, org_id, metadata)
+    run_lead_lifecycle_workflow(
+        lead_id=lead_id,
+        org_id=org_id,
+        event_type=event_type.value,
+        metadata=metadata or {},
+    )
     
     return activity
