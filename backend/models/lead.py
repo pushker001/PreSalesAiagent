@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func, Boolean
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,6 +13,8 @@ class Lead(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     client_name: Mapped[str] = mapped_column(String(255), index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opt_out: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     website_url: Mapped[str | None] = mapped_column(String(500), index=True, nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     linkedin_summary: Mapped[str | None] = mapped_column(Text, nullable=True)

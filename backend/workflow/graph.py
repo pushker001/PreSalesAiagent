@@ -23,7 +23,12 @@ def route_trigger(state: LeadLifecycleState):
         "booking_recovery_sent",
     }:
         return "run_booking"
-    elif event == "proposal_sent":
+    elif event in {
+        "follow_up_sent",
+        "proposal_sent",
+        "conversation_reply_generated",
+        "lead_inactive",
+    }:
         return "run_follow_up"
     elif event == "message_received":
         return "run_conversation"

@@ -68,3 +68,5 @@ class SystemEventType(str, Enum):
     PROPOSAL_SENT = "proposal_sent"
     BOOKING_REMINDER_SENT = "booking_reminder_sent"
     BOOKING_RECOVERY_SENT = "booking_recovery_sent"
+    FOLLOW_UP_REPLY_RECEIVED = "follow_up_reply_received"
+    LEAD_INACTIVE = "lead_inactive"

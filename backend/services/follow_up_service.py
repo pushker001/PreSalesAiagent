@@ -11,6 +11,7 @@ def build_follow_up_suggestion(lead, qualification, report, activities):
     qualification_reasoning = getattr(qualification, "reasoning", "") or ""
 
     event_types = [activity.event_type for activity in activities] if activities else []
+    follow_up_sent_count = event_types.count("follow_up_sent")
     has_call_logged = "call_logged" in event_types
     has_follow_up_sent = "follow_up_sent" in event_types
     has_proposal_sent = "proposal_sent" in event_types
@@ -20,6 +21,51 @@ def build_follow_up_suggestion(lead, qualification, report, activities):
         for objection in objections
         if isinstance(objection, dict)
     )
+
+    def stop_follow_up(follow_up_type, recommended_timing, reasoning):
+        return {
+            "should_create_follow_up": False,
+            "follow_up_type": follow_up_type,
+            "recommended_timing": recommended_timing,
+            "subject_line": "",
+            "message": "",
+            "reasoning": reasoning,
+            "context": {
+                "status": status,
+                "booking_status": booking_status,
+                "recommended_action": str(recommended_action) if recommended_action else None,
+                "recent_event_types": event_types[:10],
+                "follow_up_sent_count": follow_up_sent_count,
+            },
+        }
+
+    if status in {"booked", "closed_won", "closed_lost"}:
+        return stop_follow_up(
+            "stopped_lead_closed_or_booked",
+            "No follow-up needed",
+            "The lead is already booked or closed, so follow-up automation should stop.",
+        )
+
+    if booking_status in {"confirmed", "completed"}:
+        return stop_follow_up(
+            "stopped_booking_confirmed",
+            "No follow-up needed",
+            "Booking is already confirmed or completed, so follow-up automation should stop.",
+        )
+
+    if has_follow_up_reply:
+        return stop_follow_up(
+            "stopped_lead_replied",
+            "No automated follow-up",
+            "The lead has replied, so the next step should be handled by conversation or coach review.",
+        )
+
+    if follow_up_sent_count >= 3:
+        return stop_follow_up(
+            "stopped_max_follow_ups_reached",
+            "No further automated follow-up",
+            "Three follow-ups have already been sent, so the lead should move to nurture or coach review.",
+        )
 
     follow_up_type = "no_response_nudge"
     recommended_timing = "Within 48 hours"
@@ -83,6 +129,7 @@ def build_follow_up_suggestion(lead, qualification, report, activities):
         reasoning = "A follow-up was already sent and no reply has been recorded, so a no-response nudge fits best."
 
     return {
+        "should_create_follow_up": True,
         "follow_up_type": follow_up_type,
         "recommended_timing": recommended_timing,
         "subject_line": subject_line,
@@ -93,5 +140,6 @@ def build_follow_up_suggestion(lead, qualification, report, activities):
             "booking_status": booking_status,
             "recommended_action": str(recommended_action) if recommended_action else None,
             "recent_event_types": event_types[:10],
+            "follow_up_sent_count": follow_up_sent_count,
         },
     }

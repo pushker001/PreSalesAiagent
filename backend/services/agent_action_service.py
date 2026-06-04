@@ -7,7 +7,6 @@ from models.enums import AgentActionStatus
 OPEN_ACTION_STATUSES = {
     AgentActionStatus.PENDING_REVIEW,
     AgentActionStatus.APPROVED,
-    AgentActionStatus.SENT,
 }
 
 

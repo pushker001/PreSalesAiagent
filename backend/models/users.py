@@ -1,5 +1,5 @@
 from uuid import uuid4
-from sqlalchemy import DateTime, String, ForeignKey, func
+from sqlalchemy import DateTime, String, ForeignKey, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from db.base import Base
 
@@ -10,6 +10,7 @@ class Organization(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    sender_settings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     users = relationship("User", back_populates="organization")
     leads = relationship("Lead", back_populates="organization")

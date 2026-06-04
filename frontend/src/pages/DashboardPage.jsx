@@ -148,8 +148,15 @@ export default function DashboardPage() {
     return priority === "high" || priority === "urgent";
   };
 
-  const highPriorityActions = agentActions.filter(isHighPriorityAction);
-  const standardPriorityActions = agentActions.filter((action) => !isHighPriorityAction(action));
+  const isScheduledForLater = (action) => {
+    if (!action.due_at) return false;
+    return new Date(action.due_at).getTime() > Date.now();
+  };
+
+  const scheduledActions = agentActions.filter(isScheduledForLater);
+  const currentActions = agentActions.filter((action) => !isScheduledForLater(action));
+  const highPriorityActions = currentActions.filter(isHighPriorityAction);
+  const standardPriorityActions = currentActions.filter((action) => !isHighPriorityAction(action));
 
   return (
     <div className="page-stack">
@@ -250,6 +257,28 @@ export default function DashboardPage() {
               <div className="action-group">
                 <h4 style={{ marginTop: "1.5rem", marginBottom: "1rem" }}>Standard priority</h4>
                 {standardPriorityActions.map((action) => {
+                  const lead = leads.find(l => l.id === action.lead_id);
+                  const qualification = qualificationMap[action.lead_id];
+                  return (
+                    <ActionCard 
+                      key={action.id}
+                      action={action}
+                      lead={lead}
+                      qualification={qualification}
+                      actionBusyId={actionBusyId}
+                      onApprove={(id) => handleActionMutation(id, approveAgentAction)}
+                      onMarkSent={(id) => handleActionMutation(id, markAgentActionSent)}
+                      onDismiss={(id) => handleActionMutation(id, dismissAgentAction)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {scheduledActions.length > 0 && (
+              <div className="action-group">
+                <h4 style={{ marginTop: "1.5rem", marginBottom: "1rem" }}>Scheduled for later</h4>
+                {scheduledActions.map((action) => {
                   const lead = leads.find(l => l.id === action.lead_id);
                   const qualification = qualificationMap[action.lead_id];
                   return (

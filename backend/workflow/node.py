@@ -77,7 +77,67 @@ def run_booking_agent(state):
         db.close()
 
 def run_follow_up_agent(state):
-    return state # Placeholder for future
+    """Calls the follow-up logic to generate a tracked follow-up action."""
+    from services.follow_up_service import build_follow_up_suggestion
+
+    db = SessionLocal()
+    try:
+        lead = get_lead_by_id(db, state["lead_id"], state["org_id"])
+        qualification = get_latest_qualification_by_lead_id(db, state["lead_id"])
+        reports = get_reports_by_lead_id(db, state["lead_id"])
+        activities = get_lead_activities(db, state["lead_id"])
+
+        if not lead or not qualification or not reports:
+            return {
+                "latest_action": None,
+                "outcome": "follow_up_context_missing",
+            }
+
+        suggestion = build_follow_up_suggestion(
+            lead,
+            qualification,
+            reports[0].full_report_json,
+            activities,
+        )
+
+        if not suggestion.get("should_create_follow_up", True):
+            return {
+                "latest_action": None,
+                "outcome": suggestion.get("follow_up_type", "follow_up_not_needed"),
+            }
+
+        due_at = datetime.now(timezone.utc) + timedelta(hours=48)
+
+        if suggestion.get("follow_up_type") in {
+            "post_call_follow_up",
+            "objection_follow_up",
+            "booking_reminder",
+        }:
+            due_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+        latest_action = {
+            "org_id": state["org_id"],
+            "lead_id": state["lead_id"],
+            "agent_name": AgentName.FOLLOW_UP,
+            "action_type": AgentActionType.SEND_FOLLOW_UP,
+            "priority": AgentActionPriority.MEDIUM,
+            "title": suggestion.get("subject_line", "Follow-up required"),
+            "message": suggestion.get("message", ""),
+            "cta": None,
+            "reasoning": suggestion.get("reasoning"),
+            "due_at": due_at,
+            "metadata_json": {
+                "follow_up_type": suggestion.get("follow_up_type"),
+                "recommended_timing": suggestion.get("recommended_timing"),
+                "follow_up_sent_count": suggestion.get("context", {}).get("follow_up_sent_count"),
+                "source": "langgraph_workflow",
+            },
+        }
+
+        return {"latest_action": latest_action}
+    finally:
+        db.close()
+
 
 def run_conversation_agent(state):
     return state # Placeholder for future
@@ -113,20 +173,101 @@ def create_action(state):
     return state
 
 def wait_for_approval(state):
-    """Pauses the workflow for human intervention."""
-    return {"requires_approval": True}
-
-def log_memory(state):
-    """Logs the completion of the workflow to the timeline."""
+    """Evaluates granular automation rules before pausing or sending."""
     db = SessionLocal()
     try:
-        create_lead_activity(db, {
-            "lead_id": state["lead_id"],
-            "event_type": "workflow_completed",
-            "title": "Agent Workflow Completed",
-            "details": f"LangGraph automatically ran the workflow for event: {state['current_event']}",
-            "metadata_json": {}
-        })
+        from models.users import Organization
+        from services.lead_service import get_lead_by_id
+        from services.email_service import send_action_email
+        from services.agent_action_service import approve_agent_action, mark_agent_action_sent, fail_agent_action
+        from services.lead_activity_service import create_lead_activity
+        from models.agent_action import AgentAction
+        from datetime import datetime, timezone
+        from sqlalchemy import func
+
+        org = db.query(Organization).filter(Organization.id == state["org_id"]).first()
+        sender_settings = org.sender_settings or {}
+        
+        # 1. Load the new Rules Engine settings
+        execution_mode = sender_settings.get("execution_mode", "rules_based")
+        
+        default_rules = {
+            "SEND_BOOKING_LINK": "low_risk_auto",
+            "SEND_BOOKING_REMINDER": "low_risk_auto",
+            "SEND_FOLLOW_UP": "approval_required",
+            "SEND_RECOVERY_MESSAGE": "approval_required",
+        }
+        action_rules = sender_settings.get("action_rules", default_rules)
+        send_limits = sender_settings.get("send_limits", {"max_per_lead_per_day": 2})
+
+        action_data = state.get("latest_action")
+        action_id = state.get("created_action_id")
+        
+        # Bail out early if it's strictly manual
+        if not action_id or execution_mode == "manual":
+            return {"requires_approval": True}
+
+        # 2. Risk Level Evaluation
+        risk_level = action_rules.get(action_data["action_type"], "approval_required")
+
+        if risk_level in ["never_auto", "approval_required"]:
+            create_lead_activity(db, {
+                "lead_id": state["lead_id"],
+                "event_type": "automation_escalated",
+                "title": "Action Escalated to Inbox",
+                "details": f"Action '{action_data['action_type']}' requires human approval (Rule: {risk_level}).",
+                "metadata_json": {}
+            })
+            return {"requires_approval": True}
+
+        # 3. Limit Check (if low_risk_auto)
+        if risk_level == "low_risk_auto":
+            today = datetime.now(timezone.utc).date()
+            
+            # Count actions sent today to this lead
+            sent_count = db.query(func.count(AgentAction.id)).filter(
+                AgentAction.lead_id == state["lead_id"],
+                AgentAction.status == "SENT",
+                func.date(AgentAction.completed_at) == today
+            ).scalar()
+
+            if sent_count >= send_limits.get("max_per_lead_per_day", 2):
+                create_lead_activity(db, {
+                    "lead_id": state["lead_id"],
+                    "event_type": "automation_limit_reached",
+                    "title": "Daily Send Limit Reached",
+                    "details": f"Lead has already received {sent_count} automated emails today. Escalating to inbox for safety.",
+                    "metadata_json": {}
+                })
+                return {"requires_approval": True}
+
+            # 4. Final Execution (Passed all safety checks!)
+            approve_agent_action(db, action_id, state["org_id"], "system_auto_rules")
+            lead = get_lead_by_id(db, state["lead_id"], state["org_id"])
+            from_email = sender_settings.get("from_email", "ai-agent@yourcompany.com")
+            
+            success = send_action_email(
+                to_email=lead.email,
+                subject=action_data["title"],
+                body=action_data["message"],
+                from_email=from_email,
+                lead_id=lead.id
+            )
+            
+            if success:
+                mark_agent_action_sent(db, action_id, state["org_id"])
+                create_lead_activity(db, {
+                    "lead_id": state["lead_id"],
+                    "event_type": "automation_executed",
+                    "title": "Action Automatically Sent",
+                    "details": f"'{action_data['action_type']}' was sent safely under the {risk_level} rule.",
+                    "metadata_json": {}
+                })
+            else:
+                fail_agent_action(db, action_id, state["org_id"])
+
+            return {"requires_approval": False}
+
+        return {"requires_approval": True}
     finally:
         db.close()
-    return state

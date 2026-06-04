@@ -431,7 +431,38 @@ def approve_action(
     action = approve_agent_action(db, action_id, current_user.org_id, current_user.id)
     if not action:
         raise HTTPException(status_code=404, detail="Agent action not found")
+        
+    # NEW: Phase 8 Execution Mode Logic
+    from models.users import Organization
+    from services.lead_service import get_lead_by_id
+    from services.email_service import send_action_email
+    from services.agent_action_service import fail_agent_action
+
+    org = db.query(Organization).filter(Organization.id == current_user.org_id).first()
+    lead = get_lead_by_id(db, action.lead_id, current_user.org_id)
+    
+    sender_settings = org.sender_settings or {}
+    execution_mode = sender_settings.get("execution_mode", "manual")
+    from_email = sender_settings.get("from_email", current_user.email)
+
+    if execution_mode in ["approval_required", "automatic"]:
+        success = send_action_email(
+            to_email=lead.email,
+            subject=action.title,
+            body=action.message,
+            from_email=from_email,
+            lead_id=lead.id
+        )
+        
+        if success:
+            # Re-use our existing mark_action_sent logic to cleanly finish the chain!
+            return mark_action_sent(action_id, db, current_user)
+        else:
+            action = fail_agent_action(db, action_id, current_user.org_id)
+
     return action
+    
+
 
 
 @app.post("/agent-actions/{action_id}/dismiss", response_model=AgentActionResponse)
@@ -489,6 +520,19 @@ def mark_action_sent(
             },
         )
 
+    if action.action_type == AgentActionType.SEND_FOLLOW_UP:
+        publish_event(
+            db=db,
+            event_type=SystemEventType.FOLLOW_UP_SENT,
+            lead_id=action.lead_id,
+            org_id=current_user.org_id,
+            title="Follow-up sent",
+            details="Follow-up was marked as sent from an agent action.",
+            metadata={
+                "action_id": action.id,
+            },
+        )
+
     if action.action_type == AgentActionType.SEND_BOOKING_REMINDER:
         update_lead(
             db,
@@ -531,6 +575,19 @@ def mark_action_sent(
             },
         )
 
+    if action.action_type == AgentActionType.SEND_FOLLOW_UP:
+        publish_event(
+            db=db,
+            event_type=SystemEventType.FOLLOW_UP_SENT,
+            lead_id=action.lead_id,
+            org_id=current_user.org_id,
+            title="Follow-up sent",
+            details="Follow-up was marked as sent from an agent action.",
+            metadata={
+                "action_id": action.id,
+            },
+        )
+
     return action
 
 
@@ -545,6 +602,32 @@ def complete_action(
         raise HTTPException(status_code=404, detail="Agent action not found")
     return action
 
+
+@app.get("/opt-out/{lead_id}")
+def opt_out_lead(
+    lead_id: str,
+    db: Session = Depends(get_db),
+):
+    from models.lead import Lead
+    
+    # We query the lead directly (without org_id) because opt-out links are clicked by the public
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    lead.opt_out = True
+    db.commit()
+    
+    # Log the activity so the coach knows why the AI stopped sending emails!
+    create_lead_activity(db, {
+        "lead_id": lead.id,
+        "event_type": "lead_opted_out",
+        "title": "Lead Opted Out",
+        "details": "The lead clicked the unsubscribe link and has opted out of future automated emails.",
+        "metadata_json": {}
+    })
+    
+    return {"message": "You have successfully unsubscribed from future emails."}
 
 # ---------- Streaming Endpoint ----------
 @app.post("/analyze-closure")
