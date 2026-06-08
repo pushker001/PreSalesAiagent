@@ -32,7 +32,8 @@ from services.agent_action_service import (
 )
 from models.enums import AgentActionPriority, AgentActionType, AgentName, SystemEventType
 from services.event_service import publish_event
-
+from schemas.organization import OrganizationSettingsUpdate, OrganizationSettingsResponse
+from models.users import Organization
 
 
 logging.basicConfig(
@@ -77,6 +78,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # ---------- Request Schema ----------
 class ClosureRequest(BaseModel):
     client_name: str
+    email: str | None = None
     linkedin_url: str | None = None
     website_url: str | None = None
     client_type: str
@@ -629,6 +631,52 @@ def opt_out_lead(
     
     return {"message": "You have successfully unsubscribed from future emails."}
 
+from schemas.organization import OrganizationSettingsUpdate, OrganizationSettingsResponse
+from models.users import Organization
+
+@app.get("/api/organization/settings", response_model=OrganizationSettingsResponse)
+def get_org_settings(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    org = db.query(Organization).filter(Organization.id == current_user.org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+        
+    return {
+        "org_id": org.id,
+        "brand_voice": org.brand_voice,
+        "sender_settings": org.sender_settings or {}
+    }
+
+@app.put("/api/organization/settings", response_model=OrganizationSettingsResponse)
+def update_org_settings(
+    settings: OrganizationSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    org = db.query(Organization).filter(Organization.id == current_user.org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+        
+    if settings.brand_voice is not None:
+        org.brand_voice = settings.brand_voice
+        
+    if settings.sender_settings is not None:
+        # Merge existing settings with new ones safely
+        # Wrap in dict() to create a new object so SQLAlchemy detects the change!
+        existing = dict(org.sender_settings or {})
+        existing.update(settings.sender_settings)
+        org.sender_settings = existing
+        
+    db.commit()
+    db.refresh(org)
+    
+    return {
+        "org_id": org.id,
+        "brand_voice": org.brand_voice,
+        "sender_settings": org.sender_settings or {}
+    }
 # ---------- Streaming Endpoint ----------
 @app.post("/analyze-closure")
 def analyze_closure(data: ClosureRequest, current_user=Depends(get_current_user)):

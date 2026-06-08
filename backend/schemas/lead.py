@@ -7,6 +7,7 @@ from models.enums import LeadStatus
 
 class LeadBase(BaseModel):
     client_name: str
+    email: str | None = None
     website_url: str | None = None
     linkedin_url: str | None = None
     linkedin_summary: str | None = None
@@ -38,6 +39,7 @@ class LeadResponse(LeadBase):
 
 class LeadUpdate(BaseModel):
     status: LeadStatus | None = None
+    email: str | None = None
     coach_notes: str | None = None
     booking_status: str | None = None
     last_activity_at: datetime | None = None

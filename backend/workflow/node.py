@@ -29,9 +29,13 @@ def run_booking_agent(state):
         activities = get_lead_activities(db, state["lead_id"])
         
         report_json = reports[0].full_report_json if reports else {}
+
+        from models.users import Organization
+        org = db.query(Organization).filter(Organization.id == state["org_id"]).first()
+        brand_voice = org.brand_voice if org else ""
         
-        # Call Groq LLM
-        suggestion = build_booking_suggestion(lead, qualification, report_json, activities)
+        # Call Groq LLM with Brand Voice
+        suggestion = build_booking_suggestion(lead, qualification, report_json, activities, brand_voice)
 
         if not suggestion.get("should_push_booking"):
             return {
@@ -208,7 +212,10 @@ def wait_for_approval(state):
             return {"requires_approval": True}
 
         # 2. Risk Level Evaluation
-        risk_level = action_rules.get(action_data["action_type"], "approval_required")
+        if execution_mode == "automatic":
+            risk_level = "low_risk_auto"
+        else:
+            risk_level = action_rules.get(action_data["action_type"], "approval_required")
 
         if risk_level in ["never_auto", "approval_required"]:
             create_lead_activity(db, {
@@ -241,7 +248,19 @@ def wait_for_approval(state):
                 })
                 return {"requires_approval": True}
 
-            # 4. Final Execution (Passed all safety checks!)
+            # 4. Future Date Safety Check
+            due_at = action_data.get("due_at")
+            if due_at and due_at > datetime.now(timezone.utc):
+                create_lead_activity(db, {
+                    "lead_id": state["lead_id"],
+                    "event_type": "automation_delayed",
+                    "title": "Action Scheduled for Future",
+                    "details": f"Action was drafted but is scheduled for the future. Waiting for delayed worker.",
+                    "metadata_json": {}
+                })
+                return {"requires_approval": True}
+
+            # 5. Final Execution (Passed all safety checks!)
             approve_agent_action(db, action_id, state["org_id"], "system_auto_rules")
             lead = get_lead_by_id(db, state["lead_id"], state["org_id"])
             from_email = sender_settings.get("from_email", "ai-agent@yourcompany.com")
@@ -271,3 +290,19 @@ def wait_for_approval(state):
         return {"requires_approval": True}
     finally:
         db.close()
+
+def log_memory(state):
+    """Logs the completion of the workflow to the timeline."""
+    db = SessionLocal()
+    try:
+        from services.lead_activity_service import create_lead_activity
+        create_lead_activity(db, {
+            "lead_id": state["lead_id"],
+            "event_type": "workflow_completed",
+            "title": "Agent Workflow Completed",
+            "details": f"LangGraph automatically ran the workflow for event: {state.get('current_event', 'unknown')}",
+            "metadata_json": {}
+        })
+    finally:
+        db.close()
+    return state

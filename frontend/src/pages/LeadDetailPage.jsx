@@ -359,6 +359,7 @@ export default function LeadDetailPage() {
           </p>
           <div className="tag-cloud">
             <StatusPill>{lead.status}</StatusPill>
+            {lead.email ? <StatusPill tone="default">{lead.email}</StatusPill> : null}
             {lead.website_url ? <StatusPill tone="default">{lead.website_url}</StatusPill> : null}
             {qualification ? (
               <StatusPill tone={toneFromAction(qualification.recommended_action)}>

@@ -214,3 +214,21 @@ export async function analyzeLead(formData, handlers = {}) {
 
   throw new Error("Stream completed without a final result.");
 }
+
+export async function getOrganizationSettings() {
+  const res = await fetch(`${API_BASE_URL}/api/organization/settings`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch settings");
+  return res.json();
+}
+
+export async function updateOrganizationSettings(data) {
+  const res = await fetch(`${API_BASE_URL}/api/organization/settings`, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update settings");
+  return res.json();
+}

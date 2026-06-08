@@ -97,6 +97,7 @@ class ClosureAgentOrchestrator:
             try:
                 lead_data = {
                     "client_name": data.client_name,
+                    "email": data.email,
                     "website_url": data.website_url,
                     "linkedin_url": data.linkedin_url,
                     "linkedin_summary": data.linkedin_summary,

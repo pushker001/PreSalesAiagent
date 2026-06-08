@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 const navigation = [
   { to: "/dashboard", label: "Dashboard", hint: "Lead priorities" },
   { to: "/analyze", label: "Analyze Lead", hint: "Run AI workflow" },
+  { to: "/settings", label: "Settings", hint: "Rules & Brand Voice" },
 ];
 
 export default function AppShell() {

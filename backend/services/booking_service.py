@@ -149,7 +149,7 @@ def decide_booking_strategy(signals):
     }
 
 
-def generate_booking_message(signals, strategy):
+def generate_booking_message(signals, strategy, brand_voice=""):
     objections = signals.get("objections", [])
     objections_summary = ", ".join(
         objection.get("objection", "")
@@ -158,10 +158,12 @@ def generate_booking_message(signals, strategy):
     ) or "No explicit objections recorded."
 
     booking_url = BOOKING_URL or ""
+    
+    brand_voice_prompt = f"\nBrand Voice Instructions:\n{brand_voice}\n" if brand_voice else ""
 
     prompt = f"""
 You are writing one booking message for a business coach who wants to move a lead toward a scheduled call.
-
+{brand_voice_prompt}
 Lead context:
 - Lead name: {signals["lead_name"]}
 - Lead status: {signals["status"]}
@@ -297,12 +299,12 @@ def build_booking_fallback(signals, strategy):
     }
 
 
-def build_booking_suggestion(lead, qualification, report, activities):
+def build_booking_suggestion(lead, qualification, report, activities, brand_voice=""):
     signals = extract_booking_signals(lead, qualification, report, activities)
     strategy = decide_booking_strategy(signals)
 
     try:
-        message_payload = generate_booking_message(signals, strategy)
+        message_payload = generate_booking_message(signals, strategy, brand_voice)
     except Exception:
         message_payload = build_booking_fallback(signals, strategy)
 

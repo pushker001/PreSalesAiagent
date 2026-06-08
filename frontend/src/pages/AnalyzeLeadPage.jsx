@@ -14,6 +14,7 @@ import {
 
 const defaults = {
   client_name: "",
+  email: "",
   website_url: "",
   linkedin_url: "",
   linkedin_summary: "",
@@ -94,6 +95,9 @@ export default function AnalyzeLeadPage() {
             <div className="field-grid">
               <Field label="Client name">
                 <input name="client_name" onChange={handleChange} required value={form.client_name} />
+              </Field>
+              <Field label="Lead email" hint="Used later for approved email sending">
+                <input name="email" onChange={handleChange} type="email" value={form.email} />
               </Field>
               <Field label="Website URL">
                 <input name="website_url" onChange={handleChange} value={form.website_url} />

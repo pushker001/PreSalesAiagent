@@ -6,6 +6,7 @@ import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import LandingPage from "./pages/LandingPage";
 import LeadDetailPage from "./pages/LeadDetailPage";
+import SettingPage from "./pages/SettingPage";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/analyze" element={<AnalyzeLeadPage />} />
         <Route path="/leads/:leadId" element={<LeadDetailPage />} />
+        <Route path="/settings" element={<SettingPage />} />
       </Route>
     </Routes>
   );
